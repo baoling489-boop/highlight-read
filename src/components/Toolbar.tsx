@@ -1,4 +1,4 @@
-import React, { useState } from 'react'
+import React, { useState, useEffect, useRef, useCallback } from 'react'
 
 export interface ADHDOptions {
   enabled: boolean
@@ -64,9 +64,72 @@ const Toolbar: React.FC<ToolbarProps> = ({
 }) => {
   const [showADHDPanel, setShowADHDPanel] = useState(false)
   const [showReadingPanel, setShowReadingPanel] = useState(false)
+  const [isToolbarHidden, setIsToolbarHidden] = useState(false)
+  const hideTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const toolbarRef = useRef<HTMLDivElement>(null)
+
+  // 重置自动隐藏计时器
+  const resetHideTimer = useCallback(() => {
+    setIsToolbarHidden(false)
+    if (hideTimerRef.current) {
+      clearTimeout(hideTimerRef.current)
+    }
+    // 面板展开时不自动隐藏
+    if (showADHDPanel || showReadingPanel) return
+    hideTimerRef.current = setTimeout(() => {
+      setIsToolbarHidden(true)
+    }, 3000)
+  }, [showADHDPanel, showReadingPanel])
+
+  // 监听全局鼠标移动
+  useEffect(() => {
+    const handleMouseMove = (e: MouseEvent) => {
+      // 鼠标在顶部 60px 范围内或 hover 在工具栏上时显示
+      if (e.clientY <= 60) {
+        setIsToolbarHidden(false)
+        if (hideTimerRef.current) clearTimeout(hideTimerRef.current)
+        return
+      }
+      resetHideTimer()
+    }
+
+    document.addEventListener('mousemove', handleMouseMove, { passive: true })
+    // 初始启动计时器
+    resetHideTimer()
+
+    return () => {
+      document.removeEventListener('mousemove', handleMouseMove)
+      if (hideTimerRef.current) clearTimeout(hideTimerRef.current)
+    }
+  }, [resetHideTimer])
+
+  // 面板打开时暂停自动隐藏
+  useEffect(() => {
+    if (showADHDPanel || showReadingPanel) {
+      setIsToolbarHidden(false)
+      if (hideTimerRef.current) clearTimeout(hideTimerRef.current)
+    } else {
+      resetHideTimer()
+    }
+  }, [showADHDPanel, showReadingPanel, resetHideTimer])
 
   return (
-    <div style={styles.toolbar}>
+    <div
+      ref={toolbarRef}
+      style={{
+        ...styles.toolbar,
+        transform: isToolbarHidden ? 'translateY(-100%)' : 'translateY(0)',
+        opacity: isToolbarHidden ? 0 : 1,
+        transition: 'transform 0.35s cubic-bezier(0.4, 0, 0.2, 1), opacity 0.35s ease',
+      }}
+      onMouseEnter={() => {
+        setIsToolbarHidden(false)
+        if (hideTimerRef.current) clearTimeout(hideTimerRef.current)
+      }}
+      onMouseLeave={() => {
+        resetHideTimer()
+      }}
+    >
       {/* 左侧 */}
       <div style={styles.left}>
         <button style={styles.backBtn} onClick={onBack} title="换书">

@@ -511,28 +511,114 @@ const EpubReader: React.FC<EpubReaderProps> = ({ bookData, fileName, onBack }) =
     }
 
     styleEl.textContent = `
+      /* ===== 基础排版 ===== */
+      html {
+        scroll-behavior: smooth !important;
+      }
       body {
-        font-family: 'Noto Serif SC', 'Source Han Serif SC', Georgia, serif !important;
+        font-family: 'Noto Serif SC', 'Source Han Serif SC', 'Songti SC', 'STSong', 'SimSun', Georgia, serif !important;
         font-size: ${fs}px !important;
         line-height: ${BASE_LINE_HEIGHT} !important;
-        color: ${dark ? '#e8e8e8' : '#1a1a1a'} !important;
+        color: ${dark ? '#e0e0e0' : '#222222'} !important;
         background: ${dark ? '#16213e' : '#fffdf8'} !important;
-        padding-top: 20px !important;
-        padding-bottom: 20px !important;
+        padding: 20px clamp(16px, 5vw, 48px) !important;
+        max-width: 42em !important;
+        margin: 0 auto !important;
         text-rendering: optimizeLegibility !important;
         -webkit-font-smoothing: antialiased !important;
+        word-break: break-word !important;
+        overflow-wrap: break-word !important;
+        transition: background-color 0.3s ease, color 0.3s ease !important;
       }
+
+      /* ===== 段落排版 ===== */
       p {
         text-indent: 2em !important;
-        margin-bottom: 0.8em !important;
+        margin-bottom: 0.6lh !important;
+        transition: color 0.3s ease !important;
       }
-      h1, h2, h3, h4 {
+
+      /* ===== 标题层次 ===== */
+      h1, h2, h3, h4, h5, h6 {
         text-indent: 0 !important;
-        margin-top: 1.5em !important;
-        margin-bottom: 0.8em !important;
         font-weight: 700 !important;
+        line-height: 1.4 !important;
+        transition: color 0.3s ease !important;
       }
-      /* 选中文本样式 */
+      h1 {
+        font-size: 1.6em !important;
+        margin-top: 2em !important;
+        margin-bottom: 0.8em !important;
+      }
+      h2 {
+        font-size: 1.4em !important;
+        margin-top: 1.8em !important;
+        margin-bottom: 0.7em !important;
+      }
+      h3 {
+        font-size: 1.2em !important;
+        margin-top: 1.5em !important;
+        margin-bottom: 0.6em !important;
+      }
+      h4 {
+        font-size: 1.1em !important;
+        margin-top: 1.3em !important;
+        margin-bottom: 0.5em !important;
+      }
+
+      /* ===== 暗色模式元素适配 ===== */
+      a {
+        color: ${dark ? '#93c5fd' : '#4f46e5'} !important;
+        text-decoration-color: ${dark ? 'rgba(147, 197, 253, 0.3)' : 'rgba(79, 70, 229, 0.3)'} !important;
+        transition: color 0.3s ease !important;
+      }
+      a:hover {
+        text-decoration-color: ${dark ? 'rgba(147, 197, 253, 0.7)' : 'rgba(79, 70, 229, 0.7)'} !important;
+      }
+      blockquote {
+        border-left: 3px solid ${dark ? '#4a4a6a' : '#d4d0ca'} !important;
+        background: ${dark ? 'rgba(255,255,255,0.03)' : 'rgba(0,0,0,0.02)'} !important;
+        padding: 0.8em 1.2em !important;
+        margin: 1em 0 !important;
+        border-radius: 0 4px 4px 0 !important;
+        transition: background-color 0.3s ease, border-color 0.3s ease !important;
+      }
+      code {
+        background: ${dark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.04)'} !important;
+        padding: 0.15em 0.4em !important;
+        border-radius: 3px !important;
+        font-size: 0.9em !important;
+        transition: background-color 0.3s ease !important;
+      }
+      pre {
+        background: ${dark ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.03)'} !important;
+        padding: 1em !important;
+        border-radius: 6px !important;
+        overflow-x: auto !important;
+        transition: background-color 0.3s ease !important;
+      }
+      pre code {
+        background: transparent !important;
+        padding: 0 !important;
+      }
+      hr {
+        border: none !important;
+        border-top: 1px solid ${dark ? '#2a2a4a' : '#e8e5e0'} !important;
+        margin: 2em 0 !important;
+      }
+      table {
+        border-collapse: collapse !important;
+        width: 100% !important;
+      }
+      th, td {
+        border: 1px solid ${dark ? '#2a2a4a' : '#e8e5e0'} !important;
+        padding: 0.5em 0.8em !important;
+      }
+      th {
+        background: ${dark ? 'rgba(255,255,255,0.05)' : 'rgba(0,0,0,0.03)'} !important;
+      }
+
+      /* ===== 选中文本样式 ===== */
       ::selection {
         background: rgba(99, 102, 241, 0.25);
         color: inherit;
@@ -541,10 +627,28 @@ const EpubReader: React.FC<EpubReaderProps> = ({ bookData, fileName, onBack }) =
         background: rgba(99, 102, 241, 0.25);
         color: inherit;
       }
-      /* 图片自适应 */
+
+      /* ===== 图片自适应 ===== */
       img {
         max-width: 100% !important;
         height: auto !important;
+        border-radius: 4px !important;
+      }
+
+      /* ===== iframe 内滚动条细化 ===== */
+      ::-webkit-scrollbar {
+        width: 6px;
+        height: 6px;
+      }
+      ::-webkit-scrollbar-track {
+        background: transparent;
+      }
+      ::-webkit-scrollbar-thumb {
+        background: ${dark ? 'rgba(255,255,255,0.15)' : 'rgba(0,0,0,0.12)'};
+        border-radius: 3px;
+      }
+      ::-webkit-scrollbar-thumb:hover {
+        background: ${dark ? 'rgba(255,255,255,0.25)' : 'rgba(0,0,0,0.22)'};
       }
     `
   }, []) // 不依赖 state，通过 ref 读取
@@ -708,12 +812,49 @@ const EpubReader: React.FC<EpubReaderProps> = ({ bookData, fileName, onBack }) =
       }
     })
 
-    // 键盘翻页
+    // 键盘操作：scrolled-doc 模式下实现平滑滚动
     const handleKeyPress = (e: KeyboardEvent) => {
-      if (e.key === 'ArrowLeft' || e.key === 'PageUp') {
+      // 获取 iframe 内的 window 用于滚动
+      const iframe = viewerRef.current?.querySelector('iframe')
+      const iframeWin = iframe?.contentWindow
+      const iframeDoc = iframe?.contentDocument
+
+      if (e.key === 'ArrowLeft') {
+        // 上一章
         renditionRef.current?.prev()
-      } else if (e.key === 'ArrowRight' || e.key === 'PageDown' || e.key === ' ') {
+      } else if (e.key === 'ArrowRight') {
+        // 下一章
         renditionRef.current?.next()
+      } else if (e.key === 'ArrowDown' || e.key === 'PageDown' || e.key === ' ') {
+        // 向下平滑滚动约 85% 视口高度
+        e.preventDefault()
+        if (iframeWin && iframeDoc) {
+          const clientHeight = iframeWin.innerHeight || iframeDoc.documentElement.clientHeight || 600
+          const scrollTop = iframeWin.scrollY || iframeDoc.documentElement.scrollTop || 0
+          const scrollHeight = iframeDoc.documentElement.scrollHeight || iframeDoc.body.scrollHeight || 1
+          const maxScroll = scrollHeight - clientHeight
+
+          if (scrollTop >= maxScroll - 5) {
+            // 已到底部，翻下一章
+            renditionRef.current?.next()
+          } else {
+            iframeWin.scrollBy({ top: Math.round(clientHeight * 0.85), behavior: 'smooth' })
+          }
+        }
+      } else if (e.key === 'ArrowUp' || e.key === 'PageUp') {
+        // 向上平滑滚动约 85% 视口高度
+        e.preventDefault()
+        if (iframeWin && iframeDoc) {
+          const clientHeight = iframeWin.innerHeight || iframeDoc.documentElement.clientHeight || 600
+          const scrollTop = iframeWin.scrollY || iframeDoc.documentElement.scrollTop || 0
+
+          if (scrollTop <= 5) {
+            // 已到顶部，翻上一章
+            renditionRef.current?.prev()
+          } else {
+            iframeWin.scrollBy({ top: -Math.round(clientHeight * 0.85), behavior: 'smooth' })
+          }
+        }
       }
     }
     document.addEventListener('keydown', handleKeyPress)
@@ -870,7 +1011,12 @@ const EpubReader: React.FC<EpubReaderProps> = ({ bookData, fileName, onBack }) =
             style={styles.prevHotzone}
             onClick={handlePrev}
             title="上一章"
-          />
+            className="hotzone-prev"
+          >
+            <svg width="20" height="20" viewBox="0 0 20 20" fill="none" style={styles.hotzoneArrow}>
+              <path d="M12 4L6 10L12 16" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+            </svg>
+          </div>
 
           {/* epub.js 渲染容器 */}
           <div
@@ -886,7 +1032,12 @@ const EpubReader: React.FC<EpubReaderProps> = ({ bookData, fileName, onBack }) =
             style={styles.nextHotzone}
             onClick={handleNext}
             title="下一章"
-          />
+            className="hotzone-next"
+          >
+            <svg width="20" height="20" viewBox="0 0 20 20" fill="none" style={styles.hotzoneArrow}>
+              <path d="M8 4L14 10L8 16" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+            </svg>
+          </div>
         </div>
       </div>
 
@@ -936,6 +1087,10 @@ const styles: Record<string, React.CSSProperties> = {
     cursor: 'w-resize',
     zIndex: 2,
     backgroundColor: 'transparent',
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    transition: 'background 0.3s ease',
   },
   nextHotzone: {
     width: 60,
@@ -944,6 +1099,15 @@ const styles: Record<string, React.CSSProperties> = {
     cursor: 'e-resize',
     zIndex: 2,
     backgroundColor: 'transparent',
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    transition: 'background 0.3s ease',
+  },
+  hotzoneArrow: {
+    opacity: 0,
+    transition: 'opacity 0.3s ease',
+    color: 'var(--text-muted)',
   },
   loadingOverlay: {
     position: 'absolute',
