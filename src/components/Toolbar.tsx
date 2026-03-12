@@ -31,6 +31,8 @@ interface ToolbarProps {
   // 书签
   isBookmarked: boolean
   onToggleBookmark: () => void
+  // 搜索
+  onSearch: () => void
 }
 
 function formatTime(totalSec: number): string {
@@ -61,6 +63,7 @@ const Toolbar: React.FC<ToolbarProps> = ({
   onBack,
   isBookmarked,
   onToggleBookmark,
+  onSearch,
 }) => {
   const [showADHDPanel, setShowADHDPanel] = useState(false)
   const [showReadingPanel, setShowReadingPanel] = useState(false)
@@ -154,6 +157,12 @@ const Toolbar: React.FC<ToolbarProps> = ({
         >
           <svg width="16" height="16" viewBox="0 0 16 16" fill={isBookmarked ? '#ef4444' : 'none'}>
             <path d="M4 2h8a1 1 0 011 1v11.5a.5.5 0 01-.77.42L8 12.5l-4.23 2.42A.5.5 0 013 14.5V3a1 1 0 011-1z" stroke={isBookmarked ? '#ef4444' : 'currentColor'} strokeWidth="1.3" strokeLinejoin="round" />
+          </svg>
+        </button>
+        <button style={styles.iconBtn} onClick={onSearch} title="搜索 (Ctrl+F)">
+          <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
+            <circle cx="7" cy="7" r="4.5" stroke="currentColor" strokeWidth="1.5" />
+            <path d="M10.5 10.5L14 14" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
           </svg>
         </button>
         <span style={styles.chapterTitle}>{currentChapterTitle}</span>

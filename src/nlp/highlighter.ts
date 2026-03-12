@@ -101,29 +101,53 @@ export function generateHighlightStyles(words: HighlightWord[]): string {
 
 /**
  * 生成 ADHD 模式的 CSS 样式
+ * isDark: 是否为暗色模式，用于适配句首/句尾颜色
  */
 export function generateADHDStyles(options: {
   sentenceBold: boolean
   lineHighlight: boolean
   letterSpacing: boolean
   lineSpacingEnhance: boolean
+  isDark?: boolean
 }): string {
   let css = ''
+  const dark = options.isDark ?? false
 
-  // 句首渐变加粗 + 句尾深灰渐变
+  // 句首渐变加粗 + 句尾渐变
   if (options.sentenceBold) {
-    css += `
-      .adhd-head-1 { font-weight: 900 !important; color: #000000 !important; }
-      .adhd-head-2 { font-weight: 800 !important; color: #1a1a1a !important; }
-      .adhd-head-3 { font-weight: 700 !important; color: #333333 !important; }
-      .adhd-head-4 { font-weight: 600 !important; color: #4a4a4a !important; }
-      .adhd-head-5 { font-weight: 500 !important; color: #666666 !important; }
-      .adhd-tail-1 { color: #3a3a3a !important; }
-      .adhd-tail-2 { color: #555555 !important; }
-      .adhd-tail-3 { color: #707070 !important; }
-      .adhd-tail-4 { color: #8a8a8a !important; }
-      .adhd-tail-5 { color: #a0a0a0 !important; }
-    `
+    if (dark) {
+      // 暗色模式（正文 #e0e0e0，背景深蓝）
+      // 句首：白色渐变到正文色，字重从 900 到 500
+      // 句尾：用偏蓝灰色系，视觉有辨识度但不会太暗
+      css += `
+        .adhd-head-1 { font-weight: 900 !important; color: #ffffff !important; }
+        .adhd-head-2 { font-weight: 800 !important; color: #f0f0f0 !important; }
+        .adhd-head-3 { font-weight: 700 !important; color: #e0e0e0 !important; }
+        .adhd-head-4 { font-weight: 650 !important; color: #d4d4d4 !important; }
+        .adhd-head-5 { font-weight: 600 !important; color: #c8c8c8 !important; }
+        .adhd-tail-1 { color: #b0b8c8 !important; }
+        .adhd-tail-2 { color: #9aa4b8 !important; }
+        .adhd-tail-3 { color: #8690a5 !important; }
+        .adhd-tail-4 { color: #727d93 !important; }
+        .adhd-tail-5 { color: #606b82 !important; }
+      `
+    } else {
+      // 浅色模式（正文 #222）
+      // 句首：纯黑渐变到正文色，渐变更缓更自然
+      // 句尾：改用蓝灰色系（slate），视觉上有色彩辨识度但不会太淡
+      css += `
+        .adhd-head-1 { font-weight: 900 !important; color: #000000 !important; }
+        .adhd-head-2 { font-weight: 800 !important; color: #0a0a0a !important; }
+        .adhd-head-3 { font-weight: 700 !important; color: #151515 !important; }
+        .adhd-head-4 { font-weight: 650 !important; color: #1c1c1c !important; }
+        .adhd-head-5 { font-weight: 600 !important; color: #222222 !important; }
+        .adhd-tail-1 { color: #334155 !important; }
+        .adhd-tail-2 { color: #3d4d63 !important; }
+        .adhd-tail-3 { color: #475569 !important; }
+        .adhd-tail-4 { color: #546478 !important; }
+        .adhd-tail-5 { color: #64748b !important; }
+      `
+    }
   }
 
   // 当前行高亮 — 使用更柔和的样式，避免与高亮/句首句尾冲突
@@ -185,7 +209,15 @@ export function generateADHDStyles(options: {
 }
 
 /**
+ * 转义正则表达式特殊字符
+ */
+function escapeRegExp(str: string): string {
+  return str.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+}
+
+/**
  * 在文档中应用自定义高亮词
+ * 优化：将所有高亮词编译为单一正则表达式，一次性匹配，避免 N×M 嵌套循环
  */
 export function applyCustomHighlights(doc: Document, words: HighlightWord[]): void {
   if (!words.length) return
@@ -193,25 +225,33 @@ export function applyCustomHighlights(doc: Document, words: HighlightWord[]): vo
   const body = doc.body
   if (!body) return
 
+  // 构建词 → 颜色映射表
+  const wordColorMap = new Map<string, string>()
+  for (const w of words) {
+    wordColorMap.set(w.text, w.color)
+  }
+
+  // 将所有高亮词编译为单一正则（按长度降序，优先匹配长词）
+  const sortedWords = [...words].sort((a, b) => b.text.length - a.text.length)
+  const pattern = sortedWords.map((w) => escapeRegExp(w.text)).join('|')
+  const regex = new RegExp(pattern, 'g')
+
   // 遍历所有文本节点
   const walker = doc.createTreeWalker(body, NodeFilter.SHOW_TEXT, null)
   const textNodes: Text[] = []
   let node: Text | null
   while ((node = walker.nextNode() as Text)) {
     if (node.textContent && node.textContent.trim().length > 0) {
-      // 跳过已高亮节点
       const parent = node.parentElement
-      if (parent && parent.className && parent.className.startsWith('user-highlight-')) {
-        continue
-      }
-      // 跳过 ADHD 标记节点
-      if (parent && parent.className && (
-        parent.className.includes('adhd-bold') ||
-        parent.className.includes('adhd-head-') ||
-        parent.className.includes('adhd-tail-') ||
-        parent.className.includes('adhd-para-first')
-      )) {
-        continue
+      if (parent && parent.className) {
+        // 跳过已高亮/ADHD 标记节点
+        if (parent.className.startsWith('user-highlight-') ||
+            parent.className.includes('adhd-bold') ||
+            parent.className.includes('adhd-head-') ||
+            parent.className.includes('adhd-tail-') ||
+            parent.className.includes('adhd-para-first')) {
+          continue
+        }
       }
       textNodes.push(node)
     }
@@ -221,27 +261,26 @@ export function applyCustomHighlights(doc: Document, words: HighlightWord[]): vo
     const text = textNode.textContent || ''
     if (text.trim().length < 1) continue
 
-    // 查找所有高亮词在文本中的位置
+    // 用单一正则一次性查找所有匹配
+    regex.lastIndex = 0
     const matches: { start: number; end: number; color: string }[] = []
+    let match: RegExpExecArray | null
 
-    for (const word of words) {
-      let searchFrom = 0
-      while (searchFrom < text.length) {
-        const idx = text.indexOf(word.text, searchFrom)
-        if (idx === -1) break
+    while ((match = regex.exec(text)) !== null) {
+      const matchedText = match[0]
+      const color = wordColorMap.get(matchedText)
+      if (color) {
         matches.push({
-          start: idx,
-          end: idx + word.text.length,
-          color: word.color,
+          start: match.index,
+          end: match.index + matchedText.length,
+          color,
         })
-        searchFrom = idx + word.text.length
       }
     }
 
     if (matches.length === 0) continue
 
-    // 按位置排序、去重重叠
-    matches.sort((a, b) => a.start - b.start)
+    // 去重重叠（已按位置顺序，正则保证不重叠，但以防万一）
     const filtered: typeof matches = []
     for (const m of matches) {
       if (filtered.length === 0 || m.start >= filtered[filtered.length - 1].end) {
@@ -522,43 +561,23 @@ export function saveReadingTime(bookId: string, seconds: number): void {
 
 /**
  * 清除文档中所有自定义高亮和 ADHD 标记，恢复原始文本节点
+ * 优化：合并为一次 querySelectorAll，批量替换后只 normalize 一次
  */
 export function clearAllEffects(doc: Document): void {
   const body = doc.body
   if (!body) return
 
-  // 清除高亮 span（class 以 user-highlight- 开头）
-  const highlightSpans = body.querySelectorAll('[class^="user-highlight-"]')
-  highlightSpans.forEach((span) => {
-    const parent = span.parentNode
-    if (parent) {
-      const textNode = doc.createTextNode(span.textContent || '')
-      parent.replaceChild(textNode, span)
-      parent.normalize()
-    }
-  })
-
-  // 清除 ADHD 句首渐变/句尾渐变 span
-  const adhdHeadTailSpans = body.querySelectorAll(
-    '[class^="adhd-head-"], [class^="adhd-tail-"]'
+  // 一次性查询所有需要清除的 span（高亮 + ADHD 句首/句尾 + 旧版 bold）
+  const allSpans = body.querySelectorAll(
+    '[class^="user-highlight-"], [class^="adhd-head-"], [class^="adhd-tail-"], .adhd-bold'
   )
-  adhdHeadTailSpans.forEach((span) => {
-    const parent = span.parentNode
-    if (parent) {
-      const textNode = doc.createTextNode(span.textContent || '')
-      parent.replaceChild(textNode, span)
-      parent.normalize()
-    }
-  })
 
-  // 清除旧版 ADHD bold span（兼容）
-  const adhdBoldSpans = body.querySelectorAll('.adhd-bold')
-  adhdBoldSpans.forEach((span) => {
+  // 批量替换为文本节点，不在循环中 normalize
+  allSpans.forEach((span) => {
     const parent = span.parentNode
     if (parent) {
       const textNode = doc.createTextNode(span.textContent || '')
       parent.replaceChild(textNode, span)
-      parent.normalize()
     }
   })
 
@@ -572,7 +591,7 @@ export function clearAllEffects(doc: Document): void {
   // 清除 ADHD line-spacing-enhance class
   body.classList.remove('adhd-line-spacing-enhance')
 
-  // 最终对 body 做一次 normalize，合并所有相邻的文本节点
+  // 最终只做一次 normalize，合并所有相邻的文本节点
   body.normalize()
 }
 

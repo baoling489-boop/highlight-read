@@ -2,6 +2,7 @@ import React, { useEffect, useRef, useState, useCallback } from 'react'
 import ePub from 'epubjs'
 import Toolbar, { ADHDOptions } from './Toolbar'
 import Sidebar from './Sidebar'
+import SearchBar from './SearchBar'
 import {
   HighlightWord,
   Bookmark,
@@ -169,6 +170,14 @@ const EpubReader: React.FC<EpubReaderProps> = ({ bookData, fileName, onBack }) =
     text: string
   }>({ visible: false, x: 0, y: 0, text: '' })
 
+  // 搜索状态
+  const [showSearch, setShowSearch] = useState(false)
+  const [searchText, setSearchText] = useState('')
+  const [searchCurrentMatch, setSearchCurrentMatch] = useState(0)
+  const [searchTotalMatches, setSearchTotalMatches] = useState(0)
+  const searchMatchesRef = useRef<HTMLElement[]>([])
+  const searchCurrentRef = useRef(0)
+
   // 存储 iframe doc 上的事件清理函数
   const cleanupRef = useRef<(() => void) | null>(null)
 
@@ -303,6 +312,184 @@ const EpubReader: React.FC<EpubReaderProps> = ({ bookData, fileName, onBack }) =
     input.click()
   }, [])
 
+  // ========== 搜索功能 ==========
+
+  // 清除 iframe 中的搜索高亮
+  const clearSearchHighlights = useCallback(() => {
+    try {
+      const doc = contentsRef.current?.document as Document
+      if (!doc?.body) return
+      const spans = doc.body.querySelectorAll('.search-highlight, .search-highlight-active')
+      spans.forEach((span) => {
+        const parent = span.parentNode
+        if (parent) {
+          const textNode = doc.createTextNode(span.textContent || '')
+          parent.replaceChild(textNode, span)
+        }
+      })
+      doc.body.normalize()
+    } catch (_) {}
+    searchMatchesRef.current = []
+    searchCurrentRef.current = 0
+    setSearchTotalMatches(0)
+    setSearchCurrentMatch(0)
+  }, [])
+
+  // 在 iframe 文档中执行搜索
+  const performSearch = useCallback((keyword: string) => {
+    clearSearchHighlights()
+
+    if (!keyword || keyword.trim().length === 0) return
+
+    try {
+      const doc = contentsRef.current?.document as Document
+      if (!doc?.body) return
+
+      // 注入搜索高亮样式
+      let styleEl = doc.getElementById('search-highlight-styles')
+      if (!styleEl) {
+        styleEl = doc.createElement('style')
+        styleEl.id = 'search-highlight-styles'
+        doc.head.appendChild(styleEl)
+      }
+      styleEl.textContent = `
+        .search-highlight {
+          background-color: rgba(250, 204, 21, 0.4) !important;
+          border-radius: 2px;
+          padding: 0 1px;
+        }
+        .search-highlight-active {
+          background-color: rgba(249, 115, 22, 0.6) !important;
+          border-radius: 2px;
+          padding: 0 1px;
+          outline: 2px solid rgba(249, 115, 22, 0.8);
+          outline-offset: 1px;
+        }
+      `
+
+      const lowerKeyword = keyword.toLowerCase()
+      const escapedKeyword = keyword.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+      const regex = new RegExp(escapedKeyword, 'gi')
+
+      // 遍历文本节点
+      const walker = doc.createTreeWalker(doc.body, NodeFilter.SHOW_TEXT, null)
+      const textNodes: Text[] = []
+      let node: Text | null
+      while ((node = walker.nextNode() as Text)) {
+        if (node.textContent && node.textContent.toLowerCase().includes(lowerKeyword)) {
+          const parent = node.parentElement
+          // 跳过已有的搜索高亮、脚本、样式元素
+          if (parent) {
+            const tag = parent.tagName?.toLowerCase()
+            if (tag === 'script' || tag === 'style') continue
+            if (parent.className?.includes?.('search-highlight')) continue
+          }
+          textNodes.push(node)
+        }
+      }
+
+      const allSpans: HTMLElement[] = []
+
+      for (const textNode of textNodes) {
+        const text = textNode.textContent || ''
+        regex.lastIndex = 0
+        const matches: { start: number; end: number }[] = []
+        let match: RegExpExecArray | null
+
+        while ((match = regex.exec(text)) !== null) {
+          matches.push({ start: match.index, end: match.index + match[0].length })
+        }
+
+        if (matches.length === 0) continue
+
+        const fragment = doc.createDocumentFragment()
+        let lastIndex = 0
+
+        for (const m of matches) {
+          if (m.start > lastIndex) {
+            fragment.appendChild(doc.createTextNode(text.slice(lastIndex, m.start)))
+          }
+
+          const span = doc.createElement('span')
+          span.className = 'search-highlight'
+          span.textContent = text.slice(m.start, m.end)
+          fragment.appendChild(span)
+          allSpans.push(span)
+
+          lastIndex = m.end
+        }
+
+        if (lastIndex < text.length) {
+          fragment.appendChild(doc.createTextNode(text.slice(lastIndex)))
+        }
+
+        textNode.parentNode?.replaceChild(fragment, textNode)
+      }
+
+      searchMatchesRef.current = allSpans
+      setSearchTotalMatches(allSpans.length)
+
+      // 高亮第一个匹配
+      if (allSpans.length > 0) {
+        searchCurrentRef.current = 0
+        allSpans[0].className = 'search-highlight-active'
+        allSpans[0].scrollIntoView({ behavior: 'smooth', block: 'center' })
+        setSearchCurrentMatch(1)
+      }
+    } catch (err) {
+      console.warn('搜索出错:', err)
+    }
+  }, [clearSearchHighlights])
+
+  // 搜索文本变化时重新搜索（防抖）
+  const searchDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const handleSearchTextChange = useCallback((text: string) => {
+    setSearchText(text)
+    if (searchDebounceRef.current) {
+      clearTimeout(searchDebounceRef.current)
+    }
+    searchDebounceRef.current = setTimeout(() => {
+      performSearch(text)
+    }, 200)
+  }, [performSearch])
+
+  // 导航到下一个匹配
+  const searchNext = useCallback(() => {
+    const spans = searchMatchesRef.current
+    if (spans.length === 0) return
+
+    const prevIdx = searchCurrentRef.current
+    spans[prevIdx].className = 'search-highlight'
+
+    const nextIdx = (prevIdx + 1) % spans.length
+    searchCurrentRef.current = nextIdx
+    spans[nextIdx].className = 'search-highlight-active'
+    spans[nextIdx].scrollIntoView({ behavior: 'smooth', block: 'center' })
+    setSearchCurrentMatch(nextIdx + 1)
+  }, [])
+
+  // 导航到上一个匹配
+  const searchPrev = useCallback(() => {
+    const spans = searchMatchesRef.current
+    if (spans.length === 0) return
+
+    const prevIdx = searchCurrentRef.current
+    spans[prevIdx].className = 'search-highlight'
+
+    const nextIdx = (prevIdx - 1 + spans.length) % spans.length
+    searchCurrentRef.current = nextIdx
+    spans[nextIdx].className = 'search-highlight-active'
+    spans[nextIdx].scrollIntoView({ behavior: 'smooth', block: 'center' })
+    setSearchCurrentMatch(nextIdx + 1)
+  }, [])
+
+  // 关闭搜索
+  const closeSearch = useCallback(() => {
+    setShowSearch(false)
+    setSearchText('')
+    clearSearchHighlights()
+  }, [clearSearchHighlights])
+
   // 应用所有效果（高亮+ADHD）到当前页面
   // 关键：通过 ref 读取最新的 state，避免闭包捕获旧值
   const applyEffects = useCallback((contents: any) => {
@@ -339,6 +526,7 @@ const EpubReader: React.FC<EpubReaderProps> = ({ bookData, fileName, onBack }) =
           lineHighlight: opts.lineHighlight,
           letterSpacing: opts.letterSpacing,
           lineSpacingEnhance: opts.lineSpacingEnhance,
+          isDark: isDarkModeRef.current,
         })
       }
       styleEl.textContent = css
@@ -395,6 +583,15 @@ const EpubReader: React.FC<EpubReaderProps> = ({ bookData, fileName, onBack }) =
       }
       doc.addEventListener('mouseup', handleMouseUp, true)
 
+      // --- iframe 内 Ctrl/Cmd+F 打开搜索 ---
+      const handleIframeKeyDown = (e: KeyboardEvent) => {
+        if ((e.ctrlKey || e.metaKey) && e.key === 'f') {
+          e.preventDefault()
+          setShowSearch(true)
+        }
+      }
+      doc.addEventListener('keydown', handleIframeKeyDown, true)
+
       // --- ADHD 行高亮 ---
       let adhdCleanup: (() => void) | null = null
       if (adhdOn && opts.lineHighlight) {
@@ -404,6 +601,7 @@ const EpubReader: React.FC<EpubReaderProps> = ({ bookData, fileName, onBack }) =
       // 保存清理函数
       cleanupRef.current = () => {
         doc.removeEventListener('mouseup', handleMouseUp, true)
+        doc.removeEventListener('keydown', handleIframeKeyDown, true)
         if (adhdCleanup) adhdCleanup()
       }
 
@@ -814,6 +1012,13 @@ const EpubReader: React.FC<EpubReaderProps> = ({ bookData, fileName, onBack }) =
 
     // 键盘操作：scrolled-doc 模式下实现平滑滚动
     const handleKeyPress = (e: KeyboardEvent) => {
+      // Ctrl/Cmd+F 打开搜索
+      if ((e.ctrlKey || e.metaKey) && e.key === 'f') {
+        e.preventDefault()
+        setShowSearch(true)
+        return
+      }
+
       // 获取 iframe 内的 window 用于滚动
       const iframe = viewerRef.current?.querySelector('iframe')
       const iframeWin = iframe?.contentWindow
@@ -887,11 +1092,28 @@ const EpubReader: React.FC<EpubReaderProps> = ({ bookData, fileName, onBack }) =
 
   // ★ 核心修复：高亮词或 ADHD 模式切换后，直接在已有的 contents 上重新应用效果
   // 不再依赖 display(cfi) 间接触发 hooks.content，因为同一 section 内不会重新触发
+  // 使用 rAF 防抖：快速连续操作（如连续添加多个高亮词）只执行最后一次
+  const applyEffectsRafRef = useRef<number | null>(null)
   useEffect(() => {
     if (contentsRef.current && !isLoading) {
-      applyEffects(contentsRef.current)
+      // 取消之前排队的 rAF
+      if (applyEffectsRafRef.current !== null) {
+        cancelAnimationFrame(applyEffectsRafRef.current)
+      }
+      applyEffectsRafRef.current = requestAnimationFrame(() => {
+        applyEffectsRafRef.current = null
+        if (contentsRef.current) {
+          applyEffects(contentsRef.current)
+        }
+      })
     }
-  }, [highlightWords, adhdOptions]) // eslint-disable-line react-hooks/exhaustive-deps
+    return () => {
+      if (applyEffectsRafRef.current !== null) {
+        cancelAnimationFrame(applyEffectsRafRef.current)
+        applyEffectsRafRef.current = null
+      }
+    }
+  }, [highlightWords, adhdOptions, isDarkMode]) // eslint-disable-line react-hooks/exhaustive-deps
 
   // 根据 currentChapter 查找对应的标题
   useEffect(() => {
@@ -975,6 +1197,7 @@ const EpubReader: React.FC<EpubReaderProps> = ({ bookData, fileName, onBack }) =
         onBack={onBack}
         isBookmarked={isCurrentPageBookmarked}
         onToggleBookmark={addBookmark}
+        onSearch={() => setShowSearch(true)}
       />
 
       <div style={styles.body}>
@@ -999,6 +1222,18 @@ const EpubReader: React.FC<EpubReaderProps> = ({ bookData, fileName, onBack }) =
 
         {/* 阅读区域 */}
         <div style={styles.readerArea}>
+          {/* 搜索浮层 */}
+          <SearchBar
+            visible={showSearch}
+            searchText={searchText}
+            onSearchTextChange={handleSearchTextChange}
+            currentMatch={searchCurrentMatch}
+            totalMatches={searchTotalMatches}
+            onPrev={searchPrev}
+            onNext={searchNext}
+            onClose={closeSearch}
+          />
+
           {isLoading && (
             <div style={styles.loadingOverlay}>
               <div style={styles.loadingSpinner} />
@@ -1143,6 +1378,16 @@ if (typeof document !== 'undefined') {
   styleSheet.textContent = `
     @keyframes spin {
       to { transform: rotate(360deg); }
+    }
+    @keyframes searchBarSlideIn {
+      from {
+        opacity: 0;
+        transform: translateY(-8px);
+      }
+      to {
+        opacity: 1;
+        transform: translateY(0);
+      }
     }
   `
   document.head.appendChild(styleSheet)
