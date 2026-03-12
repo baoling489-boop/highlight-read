@@ -2,10 +2,10 @@ import React, { useState } from 'react'
 
 export interface ADHDOptions {
   enabled: boolean
-  sentenceBold: boolean    // 句首加粗+句尾蓝色
+  sentenceBold: boolean    // 句首加粗+句尾灰色
   lineHighlight: boolean   // 聚焦行高亮
-  paragraphEnhance: boolean // 段首强化
   letterSpacing: boolean   // 字间距增强
+  lineSpacingEnhance: boolean // 行间距增强
 }
 
 interface ToolbarProps {
@@ -19,12 +19,6 @@ interface ToolbarProps {
   // 字号
   fontSize: number
   onFontSizeChange: (size: number) => void
-  // 行间距
-  lineHeight: number
-  onLineHeightChange: (val: number) => void
-  // 页边距
-  pagePadding: number
-  onPagePaddingChange: (val: number) => void
   // ADHD
   adhdOptions: ADHDOptions
   onToggleADHD: () => void
@@ -32,6 +26,11 @@ interface ToolbarProps {
   // 计时器
   sessionSeconds: number
   totalSeconds: number
+  // 换书
+  onBack: () => void
+  // 书签
+  isBookmarked: boolean
+  onToggleBookmark: () => void
 }
 
 function formatTime(totalSec: number): string {
@@ -54,15 +53,14 @@ const Toolbar: React.FC<ToolbarProps> = ({
   progress,
   fontSize,
   onFontSizeChange,
-  lineHeight,
-  onLineHeightChange,
-  pagePadding,
-  onPagePaddingChange,
   adhdOptions,
   onToggleADHD,
   onToggleADHDOption,
   sessionSeconds,
   totalSeconds,
+  onBack,
+  isBookmarked,
+  onToggleBookmark,
 }) => {
   const [showADHDPanel, setShowADHDPanel] = useState(false)
   const [showReadingPanel, setShowReadingPanel] = useState(false)
@@ -71,9 +69,28 @@ const Toolbar: React.FC<ToolbarProps> = ({
     <div style={styles.toolbar}>
       {/* 左侧 */}
       <div style={styles.left}>
+        <button style={styles.backBtn} onClick={onBack} title="换书">
+          <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
+            <path d="M10 12L6 8L10 4" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+          </svg>
+          换书
+        </button>
+        <div style={styles.divider} />
         <button style={styles.iconBtn} onClick={onToggleSidebar} title="切换目录">
           <svg width="20" height="20" viewBox="0 0 20 20" fill="none">
             <path d="M3 5H17M3 10H17M3 15H12" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
+          </svg>
+        </button>
+        <button
+          style={{
+            ...styles.bookmarkBtn,
+            ...(isBookmarked ? styles.bookmarkBtnActive : {}),
+          }}
+          onClick={onToggleBookmark}
+          title={isBookmarked ? '移除书签' : '添加书签'}
+        >
+          <svg width="16" height="16" viewBox="0 0 16 16" fill={isBookmarked ? '#ef4444' : 'none'}>
+            <path d="M4 2h8a1 1 0 011 1v11.5a.5.5 0 01-.77.42L8 12.5l-4.23 2.42A.5.5 0 013 14.5V3a1 1 0 011-1z" stroke={isBookmarked ? '#ef4444' : 'currentColor'} strokeWidth="1.3" strokeLinejoin="round" />
           </svg>
         </button>
         <span style={styles.chapterTitle}>{currentChapterTitle}</span>
@@ -81,7 +98,7 @@ const Toolbar: React.FC<ToolbarProps> = ({
 
       {/* 中间 */}
       <div style={styles.center}>
-        <button style={styles.navBtn} onClick={onPrevPage} title="上一页">
+        <button style={styles.navBtn} onClick={onPrevPage} title="上一章">
           <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
             <path d="M10 12L6 8L10 4" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
           </svg>
@@ -99,7 +116,7 @@ const Toolbar: React.FC<ToolbarProps> = ({
           <span style={styles.progressText}>{progress.toFixed(0)}%</span>
         </div>
 
-        <button style={styles.navBtn} onClick={onNextPage} title="下一页">
+        <button style={styles.navBtn} onClick={onNextPage} title="下一章">
           <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
             <path d="M6 4L10 8L6 12" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
           </svg>
@@ -170,60 +187,6 @@ const Toolbar: React.FC<ToolbarProps> = ({
 
         <div style={styles.divider} />
 
-        {/* 行间距 */}
-        <button
-          style={styles.iconBtn}
-          onClick={() => onLineHeightChange(Math.max(1.4, +(lineHeight - 0.2).toFixed(1)))}
-          title="减小行间距"
-        >
-          <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
-            <path d="M4 3H12M4 7H12M4 11H12" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
-            <path d="M14 5L14 11" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" opacity="0.5" />
-          </svg>
-          <span style={{ fontSize: 9, marginLeft: 1 }}>-</span>
-        </button>
-        <span style={styles.adjustLabel} title="行间距">{lineHeight.toFixed(1)}</span>
-        <button
-          style={styles.iconBtn}
-          onClick={() => onLineHeightChange(Math.min(3.0, +(lineHeight + 0.2).toFixed(1)))}
-          title="增大行间距"
-        >
-          <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
-            <path d="M4 2H12M4 8H12M4 14H12" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
-            <path d="M14 4L14 12" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" opacity="0.5" />
-          </svg>
-          <span style={{ fontSize: 9, marginLeft: 1 }}>+</span>
-        </button>
-
-        <div style={styles.divider} />
-
-        {/* 页边距 */}
-        <button
-          style={styles.iconBtn}
-          onClick={() => onPagePaddingChange(Math.max(10, pagePadding - 10))}
-          title="减小页边距"
-        >
-          <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
-            <rect x="2" y="2" width="12" height="12" rx="1.5" stroke="currentColor" strokeWidth="1.2" strokeDasharray="2 2" opacity="0.5" />
-            <path d="M5 6H11M5 8H11M5 10H11" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" />
-          </svg>
-          <span style={{ fontSize: 9, marginLeft: 1 }}>-</span>
-        </button>
-        <span style={styles.adjustLabel} title="页边距">{pagePadding}</span>
-        <button
-          style={styles.iconBtn}
-          onClick={() => onPagePaddingChange(Math.min(80, pagePadding + 10))}
-          title="增大页边距"
-        >
-          <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
-            <rect x="1" y="1" width="14" height="14" rx="1.5" stroke="currentColor" strokeWidth="1.2" strokeDasharray="2 2" opacity="0.5" />
-            <path d="M5 6H11M5 8H11M5 10H11" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" />
-          </svg>
-          <span style={{ fontSize: 9, marginLeft: 1 }}>+</span>
-        </button>
-
-        <div style={styles.divider} />
-
         {/* ADHD 模式 */}
         <div style={{ position: 'relative' }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 2 }}>
@@ -271,10 +234,10 @@ const Toolbar: React.FC<ToolbarProps> = ({
               <div style={styles.dropdownPanel}>
                 <div style={styles.panelTitle}>🧠 ADHD 模式选项</div>
                 {([
-                  { key: 'sentenceBold' as const, label: '句首/句尾强化', desc: '句首渐变加粗，句尾蓝色渐变' },
-                  { key: 'lineHighlight' as const, label: '聚焦行高亮', desc: '鼠标所在行高亮，上下区域调暗' },
-                  { key: 'paragraphEnhance' as const, label: '段首强化', desc: '每段前20字加粗提示' },
+                  { key: 'sentenceBold' as const, label: '句首/句尾强化', desc: '句首渐变加粗，句尾灰色渐淡' },
+                  { key: 'lineHighlight' as const, label: '聚焦行高亮', desc: '鼠标所在行高亮，上下区域微暗' },
                   { key: 'letterSpacing' as const, label: '字间距增强', desc: '增加字间距提升辨识度' },
+                  { key: 'lineSpacingEnhance' as const, label: '行间距增强', desc: '加大行间距提升阅读舒适度' },
                 ]).map(({ key, label, desc }) => (
                   <div key={key} style={styles.optionRow}>
                     <div style={{ flex: 1 }}>
@@ -366,6 +329,36 @@ const styles: Record<string, React.CSSProperties> = {
     fontSize: 13,
     fontWeight: 600,
     transition: 'all 0.2s ease',
+  },
+  backBtn: {
+    background: 'none',
+    border: '1px solid var(--border-color)',
+    cursor: 'pointer',
+    color: 'var(--text-secondary)',
+    padding: '4px 10px 4px 6px',
+    borderRadius: 8,
+    display: 'flex',
+    alignItems: 'center',
+    gap: 2,
+    fontSize: 12,
+    fontWeight: 500,
+    transition: 'all 0.2s ease',
+    whiteSpace: 'nowrap' as const,
+  },
+  bookmarkBtn: {
+    background: 'none',
+    border: 'none',
+    cursor: 'pointer',
+    color: 'var(--text-muted)',
+    padding: '4px 5px',
+    borderRadius: 6,
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    transition: 'all 0.2s ease',
+  },
+  bookmarkBtnActive: {
+    color: '#ef4444',
   },
   navBtn: {
     background: 'none',

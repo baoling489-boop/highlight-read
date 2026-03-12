@@ -1,5 +1,5 @@
 import React, { useState } from 'react'
-import { HighlightWord, HIGHLIGHT_COLORS } from '../nlp'
+import { HighlightWord, Bookmark, HIGHLIGHT_COLORS } from '../nlp'
 
 interface TocItem {
   id: string
@@ -20,6 +20,10 @@ interface SidebarProps {
   onChangeHighlightColor: (text: string, newColor: string) => void
   onExportHighlights: () => void
   onImportHighlights: () => void
+  // 书签
+  bookmarks: Bookmark[]
+  onRemoveBookmark: (id: string) => void
+  onNavigateBookmark: (cfi: string) => void
 }
 
 const Sidebar: React.FC<SidebarProps> = ({
@@ -33,8 +37,11 @@ const Sidebar: React.FC<SidebarProps> = ({
   onChangeHighlightColor,
   onExportHighlights,
   onImportHighlights,
+  bookmarks,
+  onRemoveBookmark,
+  onNavigateBookmark,
 }) => {
-  const [activeTab, setActiveTab] = useState<'toc' | 'highlights'>('toc')
+  const [activeTab, setActiveTab] = useState<'toc' | 'highlights' | 'bookmarks'>('toc')
   const [editingWord, setEditingWord] = useState<string | null>(null)
 
   return (
@@ -63,11 +70,20 @@ const Sidebar: React.FC<SidebarProps> = ({
         <button
           style={{
             ...styles.tab,
+            ...(activeTab === 'bookmarks' ? styles.tabActive : {}),
+          }}
+          onClick={() => setActiveTab('bookmarks')}
+        >
+          🔖 书签 ({bookmarks.length})
+        </button>
+        <button
+          style={{
+            ...styles.tab,
             ...(activeTab === 'highlights' ? styles.tabActive : {}),
           }}
           onClick={() => setActiveTab('highlights')}
         >
-          🎨 我的高亮 ({highlightWords.length})
+          🎨 高亮 ({highlightWords.length})
         </button>
       </div>
 
@@ -86,6 +102,50 @@ const Sidebar: React.FC<SidebarProps> = ({
             ))}
             {toc.length === 0 && (
               <p style={styles.emptyHint}>暂无目录信息</p>
+            )}
+          </div>
+        ) : activeTab === 'bookmarks' ? (
+          <div style={styles.highlightList}>
+            {bookmarks.length === 0 ? (
+              <div style={styles.emptyState}>
+                <div style={styles.emptyIcon}>🔖</div>
+                <p style={styles.emptyTitle}>还没有书签</p>
+                <p style={styles.emptyDesc}>
+                  点击工具栏的书签图标<br />
+                  即可在当前位置添加书签
+                </p>
+              </div>
+            ) : (
+              [...bookmarks].sort((a, b) => b.createdAt - a.createdAt).map((bm) => (
+                <div
+                  key={bm.id}
+                  style={styles.bookmarkItem}
+                  onClick={() => onNavigateBookmark(bm.cfi)}
+                >
+                  <div style={styles.bookmarkContent}>
+                    <div style={styles.bookmarkChapter}>
+                      <span style={styles.bookmarkIcon}>🔖</span>
+                      {bm.chapter || '未知章节'}
+                    </div>
+                    <div style={styles.bookmarkText}>{bm.text}</div>
+                    <div style={styles.bookmarkMeta}>
+                      <span>{bm.progress.toFixed(1)}%</span>
+                      <span>·</span>
+                      <span>{new Date(bm.createdAt).toLocaleDateString('zh-CN', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })}</span>
+                    </div>
+                  </div>
+                  <button
+                    style={styles.bookmarkDeleteBtn}
+                    onClick={(e) => {
+                      e.stopPropagation()
+                      onRemoveBookmark(bm.id)
+                    }}
+                    title="删除书签"
+                  >
+                    ✕
+                  </button>
+                </div>
+              ))
             )}
           </div>
         ) : (
@@ -447,6 +507,67 @@ const styles: Record<string, React.CSSProperties> = {
     borderRadius: 8,
     cursor: 'pointer',
     transition: 'all 0.2s ease',
+  },
+  // 书签条目
+  bookmarkItem: {
+    display: 'flex',
+    alignItems: 'flex-start',
+    justifyContent: 'space-between',
+    padding: '10px 12px',
+    borderRadius: 8,
+    marginBottom: 4,
+    backgroundColor: 'var(--bg-secondary)',
+    cursor: 'pointer',
+    transition: 'all 0.2s ease',
+    gap: 8,
+  },
+  bookmarkContent: {
+    flex: 1,
+    minWidth: 0,
+  },
+  bookmarkChapter: {
+    fontSize: 13,
+    fontWeight: 600,
+    color: 'var(--text-primary)',
+    marginBottom: 4,
+    display: 'flex',
+    alignItems: 'center',
+    gap: 4,
+    overflow: 'hidden',
+    textOverflow: 'ellipsis',
+    whiteSpace: 'nowrap',
+  },
+  bookmarkIcon: {
+    fontSize: 12,
+    flexShrink: 0,
+  },
+  bookmarkText: {
+    fontSize: 12,
+    color: 'var(--text-secondary)',
+    lineHeight: 1.4,
+    overflow: 'hidden',
+    textOverflow: 'ellipsis',
+    whiteSpace: 'nowrap',
+    marginBottom: 4,
+  },
+  bookmarkMeta: {
+    fontSize: 11,
+    color: 'var(--text-muted)',
+    display: 'flex',
+    gap: 4,
+    alignItems: 'center',
+  },
+  bookmarkDeleteBtn: {
+    background: 'none',
+    border: 'none',
+    cursor: 'pointer',
+    fontSize: 13,
+    padding: '2px 6px',
+    borderRadius: 4,
+    color: 'var(--text-muted)',
+    transition: 'all 0.2s ease',
+    opacity: 0.5,
+    flexShrink: 0,
   },
 }
 

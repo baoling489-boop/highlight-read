@@ -45,6 +45,7 @@ html, body {
   height: 100%;
   width: 100%;
   overflow: hidden;
+  scroll-behavior: smooth;
 }
 
 body {
@@ -119,4 +120,12 @@ body {
 
 .animate-slide-right {
   animation: slideInRight 0.3s ease-out;
+}
+
+/* ===== 选中文本 ===== */
+::selection {
+  background: rgba(99, 102, 241, 0.2);
+}
+::-moz-selection {
+  background: rgba(99, 102, 241, 0.2);
 }

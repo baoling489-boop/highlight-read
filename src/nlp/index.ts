@@ -3,7 +3,6 @@ export {
   generateADHDStyles,
   applyCustomHighlights,
   applyADHDSentenceBold,
-  applyADHDParagraphEnhance,
   clearAllEffects,
   loadHighlightWords,
   saveHighlightWords,
@@ -11,7 +10,9 @@ export {
   importHighlightWords,
   loadReadingTime,
   saveReadingTime,
+  loadBookmarks,
+  saveBookmarks,
   HIGHLIGHT_COLORS,
 } from './highlighter'
 
-export type { HighlightWord } from './highlighter'
+export type { HighlightWord, Bookmark } from './highlighter'

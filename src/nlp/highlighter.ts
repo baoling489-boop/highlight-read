@@ -105,12 +105,12 @@ export function generateHighlightStyles(words: HighlightWord[]): string {
 export function generateADHDStyles(options: {
   sentenceBold: boolean
   lineHighlight: boolean
-  paragraphEnhance: boolean
   letterSpacing: boolean
+  lineSpacingEnhance: boolean
 }): string {
   let css = ''
 
-  // 句首渐变加粗 + 句尾蓝色渐变
+  // 句首渐变加粗 + 句尾深灰渐变
   if (options.sentenceBold) {
     css += `
       .adhd-head-1 { font-weight: 900 !important; color: #000000 !important; }
@@ -118,15 +118,15 @@ export function generateADHDStyles(options: {
       .adhd-head-3 { font-weight: 700 !important; color: #333333 !important; }
       .adhd-head-4 { font-weight: 600 !important; color: #4a4a4a !important; }
       .adhd-head-5 { font-weight: 500 !important; color: #666666 !important; }
-      .adhd-tail-1 { color: rgba(37, 99, 235, 1.0) !important; }
-      .adhd-tail-2 { color: rgba(37, 99, 235, 0.8) !important; }
-      .adhd-tail-3 { color: rgba(37, 99, 235, 0.65) !important; }
-      .adhd-tail-4 { color: rgba(37, 99, 235, 0.5) !important; }
-      .adhd-tail-5 { color: rgba(37, 99, 235, 0.3) !important; }
+      .adhd-tail-1 { color: #3a3a3a !important; }
+      .adhd-tail-2 { color: #555555 !important; }
+      .adhd-tail-3 { color: #707070 !important; }
+      .adhd-tail-4 { color: #8a8a8a !important; }
+      .adhd-tail-5 { color: #a0a0a0 !important; }
     `
   }
 
-  // 当前行高亮
+  // 当前行高亮 — 使用更柔和的样式，避免与高亮/句首句尾冲突
   if (options.lineHighlight) {
     css += `
       .adhd-line-highlight-active {
@@ -144,9 +144,8 @@ export function generateADHDStyles(options: {
         position: absolute;
         left: 0;
         right: 0;
-        background: rgba(245, 158, 11, 0.12);
-        border-top: 2px solid rgba(245, 158, 11, 0.35);
-        border-bottom: 2px solid rgba(245, 158, 11, 0.35);
+        background: rgba(245, 158, 11, 0.06);
+        border-left: 3px solid rgba(245, 158, 11, 0.5);
         transition: top 0.15s ease;
         pointer-events: none;
       }
@@ -154,19 +153,9 @@ export function generateADHDStyles(options: {
         position: absolute;
         left: 0;
         right: 0;
-        background: rgba(0, 0, 0, 0.18);
+        background: rgba(0, 0, 0, 0.08);
         pointer-events: none;
         transition: all 0.15s ease;
-      }
-    `
-  }
-
-  // 段落首行强化
-  if (options.paragraphEnhance) {
-    css += `
-      .adhd-para-first {
-        font-weight: 600 !important;
-        color: inherit;
       }
     `
   }
@@ -178,6 +167,16 @@ export function generateADHDStyles(options: {
       body.adhd-spacing * {
         letter-spacing: 0.05em !important;
         word-spacing: 0.12em !important;
+      }
+    `
+  }
+
+  // 行间距增强
+  if (options.lineSpacingEnhance) {
+    css += `
+      body.adhd-line-spacing-enhance,
+      body.adhd-line-spacing-enhance * {
+        line-height: 2.4 !important;
       }
     `
   }
@@ -407,44 +406,6 @@ export function applyADHDSentenceBold(doc: Document): void {
 }
 
 /**
- * 在文档中应用 ADHD 段落首行强化
- */
-export function applyADHDParagraphEnhance(doc: Document): void {
-  const body = doc.body
-  if (!body) return
-
-  const paragraphs = body.querySelectorAll('p')
-  paragraphs.forEach((p) => {
-    // 如果已经处理过，跳过
-    if (p.querySelector('.adhd-para-first')) return
-
-    const walker = doc.createTreeWalker(p, NodeFilter.SHOW_TEXT, null)
-    const firstTextNode = walker.nextNode() as Text
-    if (!firstTextNode || !firstTextNode.textContent) return
-
-    const text = firstTextNode.textContent
-    // 取前若干个字作为首行强化（最多20个字符）
-    const enhanceLength = Math.min(20, text.length)
-    if (enhanceLength < 2) return
-
-    const enhancedText = text.slice(0, enhanceLength)
-    const restText = text.slice(enhanceLength)
-
-    const span = doc.createElement('span')
-    span.className = 'adhd-para-first'
-    span.textContent = enhancedText
-
-    const fragment = doc.createDocumentFragment()
-    fragment.appendChild(span)
-    if (restText) {
-      fragment.appendChild(doc.createTextNode(restText))
-    }
-
-    firstTextNode.parentNode?.replaceChild(fragment, firstTextNode)
-  })
-}
-
-/**
  * localStorage 存储 key 前缀
  */
 const STORAGE_KEY_PREFIX = 'epub-highlight-words-'
@@ -601,17 +562,6 @@ export function clearAllEffects(doc: Document): void {
     }
   })
 
-  // 清除 ADHD paragraph enhance span
-  const adhdParaSpans = body.querySelectorAll('.adhd-para-first')
-  adhdParaSpans.forEach((span) => {
-    const parent = span.parentNode
-    if (parent) {
-      const textNode = doc.createTextNode(span.textContent || '')
-      parent.replaceChild(textNode, span)
-      parent.normalize()
-    }
-  })
-
   // 清除 ADHD line overlay
   const overlay = doc.getElementById('adhd-line-overlay')
   if (overlay) overlay.remove()
@@ -619,6 +569,52 @@ export function clearAllEffects(doc: Document): void {
   // 清除 ADHD spacing class
   body.classList.remove('adhd-spacing')
 
+  // 清除 ADHD line-spacing-enhance class
+  body.classList.remove('adhd-line-spacing-enhance')
+
   // 最终对 body 做一次 normalize，合并所有相邻的文本节点
   body.normalize()
+}
+
+// ============== 书签功能 ==============
+
+const BOOKMARKS_KEY_PREFIX = 'epub_bookmarks_'
+
+/**
+ * 书签条目
+ */
+export interface Bookmark {
+  id: string       // 唯一 ID
+  cfi: string      // EPUB CFI 定位
+  chapter: string  // 章节标题
+  text: string     // 书签处的文本摘要（前30字）
+  progress: number // 全书进度百分比
+  createdAt: number // 创建时间戳
+}
+
+/**
+ * 从 localStorage 读取书签列表
+ */
+export function loadBookmarks(bookId: string): Bookmark[] {
+  try {
+    const raw = localStorage.getItem(`${BOOKMARKS_KEY_PREFIX}${bookId}`)
+    if (raw) {
+      const parsed = JSON.parse(raw)
+      if (Array.isArray(parsed)) return parsed
+    }
+  } catch (e) {
+    console.warn('读取书签失败:', e)
+  }
+  return []
+}
+
+/**
+ * 保存书签列表到 localStorage
+ */
+export function saveBookmarks(bookmarks: Bookmark[], bookId: string): void {
+  try {
+    localStorage.setItem(`${BOOKMARKS_KEY_PREFIX}${bookId}`, JSON.stringify(bookmarks))
+  } catch (e) {
+    console.warn('保存书签失败:', e)
+  }
 }

@@ -4,12 +4,12 @@ import Toolbar, { ADHDOptions } from './Toolbar'
 import Sidebar from './Sidebar'
 import {
   HighlightWord,
+  Bookmark,
   HIGHLIGHT_COLORS,
   generateHighlightStyles,
   generateADHDStyles,
   applyCustomHighlights,
   applyADHDSentenceBold,
-  applyADHDParagraphEnhance,
   clearAllEffects,
   loadHighlightWords,
   saveHighlightWords,
@@ -17,6 +17,8 @@ import {
   importHighlightWords,
   loadReadingTime,
   saveReadingTime,
+  loadBookmarks,
+  saveBookmarks,
 } from '../nlp'
 
 // 用 ref 存储最新的高亮词和 ADHD 状态，避免闭包捕获旧值
@@ -133,8 +135,7 @@ const EpubReader: React.FC<EpubReaderProps> = ({ bookData, fileName, onBack }) =
   const [isDarkMode, setIsDarkMode] = useState(false)
   const [progress, setProgress] = useState(0)
   const [fontSize, setFontSize] = useState(18)
-  const [lineHeight, setLineHeight] = useState(2.1)
-  const [pagePadding, setPagePadding] = useState(40)
+
   const [bookTitle, setBookTitle] = useState(fileName.replace('.epub', ''))
   const [isLoading, setIsLoading] = useState(true)
 
@@ -142,13 +143,16 @@ const EpubReader: React.FC<EpubReaderProps> = ({ bookData, fileName, onBack }) =
   const [highlightWords, setHighlightWords] = useState<HighlightWord[]>(() => loadHighlightWords(fileName))
   const highlightWordsRef = useLatest(highlightWords)
 
+  // 书签（按书籍独立存储）
+  const [bookmarks, setBookmarks] = useState<Bookmark[]>(() => loadBookmarks(fileName))
+
   // ADHD 模式（拆分为独立子开关）
   const [adhdOptions, setAdhdOptions] = useState<ADHDOptions>({
     enabled: false,
     sentenceBold: true,
     lineHighlight: true,
-    paragraphEnhance: true,
     letterSpacing: true,
+    lineSpacingEnhance: false,
   })
   const adhdOptionsRef = useLatest(adhdOptions)
 
@@ -168,10 +172,71 @@ const EpubReader: React.FC<EpubReaderProps> = ({ bookData, fileName, onBack }) =
   // 存储 iframe doc 上的事件清理函数
   const cleanupRef = useRef<(() => void) | null>(null)
 
+  // 全书字数进度：每章字数和累计字数
+  const chapterCharsRef = useRef<{ href: string; chars: number; cumChars: number }[]>([])
+  const totalCharsRef = useRef(0)
+  // iframe 滚动进度清理函数
+  const scrollCleanupRef = useRef<(() => void) | null>(null)
+
   // 保存高亮词到 localStorage（按书籍独立存储）
   useEffect(() => {
     saveHighlightWords(highlightWords, fileName)
   }, [highlightWords, fileName])
+
+  // 保存书签到 localStorage（按书籍独立存储）
+  useEffect(() => {
+    saveBookmarks(bookmarks, fileName)
+  }, [bookmarks, fileName])
+
+  // 添加书签
+  const addBookmark = useCallback(() => {
+    const location = renditionRef.current?.location
+    if (!location?.start?.cfi) return
+
+    const cfi = location.start.cfi
+
+    // 检查是否已存在相同 CFI 的书签
+    setBookmarks((prev) => {
+      if (prev.some((b) => b.cfi === cfi)) return prev
+
+      // 获取当前页面文本摘要
+      let textSnippet = ''
+      try {
+        const doc = contentsRef.current?.document as Document
+        if (doc?.body) {
+          const text = doc.body.innerText || ''
+          textSnippet = text.substring(0, 50).replace(/\s+/g, ' ').trim()
+          if (text.length > 50) textSnippet += '...'
+        }
+      } catch (_) {}
+
+      const newBookmark: Bookmark = {
+        id: `bm_${Date.now()}`,
+        cfi,
+        chapter: currentChapterTitle,
+        text: textSnippet || '（无文本）',
+        progress: Math.round(progress * 100) / 100,
+        createdAt: Date.now(),
+      }
+      return [...prev, newBookmark]
+    })
+  }, [currentChapterTitle, progress])
+
+  // 删除书签
+  const removeBookmark = useCallback((id: string) => {
+    setBookmarks((prev) => prev.filter((b) => b.id !== id))
+  }, [])
+
+  // 跳转到书签
+  const navigateToBookmark = useCallback((cfi: string) => {
+    renditionRef.current?.display(cfi)
+  }, [])
+
+  // 判断当前位置是否已有书签
+  const isCurrentPageBookmarked = bookmarks.some((b) => {
+    const currentCfi = renditionRef.current?.location?.start?.cfi
+    return currentCfi && b.cfi === currentCfi
+  })
 
   // 添加高亮词
   const addHighlightWord = useCallback((text: string, color: string) => {
@@ -272,8 +337,8 @@ const EpubReader: React.FC<EpubReaderProps> = ({ bookData, fileName, onBack }) =
         css += generateADHDStyles({
           sentenceBold: opts.sentenceBold,
           lineHighlight: opts.lineHighlight,
-          paragraphEnhance: opts.paragraphEnhance,
           letterSpacing: opts.letterSpacing,
+          lineSpacingEnhance: opts.lineSpacingEnhance,
         })
       }
       styleEl.textContent = css
@@ -285,6 +350,13 @@ const EpubReader: React.FC<EpubReaderProps> = ({ bookData, fileName, onBack }) =
         doc.body.classList.remove('adhd-spacing')
       }
 
+      // ADHD 行间距增强
+      if (adhdOn && opts.lineSpacingEnhance) {
+        doc.body.classList.add('adhd-line-spacing-enhance')
+      } else {
+        doc.body.classList.remove('adhd-line-spacing-enhance')
+      }
+
       // 应用高亮词（DOM 操作必须在 ADHD 之前，因为都要遍历文本节点）
       if (words.length > 0) {
         applyCustomHighlights(doc, words)
@@ -293,9 +365,6 @@ const EpubReader: React.FC<EpubReaderProps> = ({ bookData, fileName, onBack }) =
       // 应用 ADHD 效果
       if (adhdOn && opts.sentenceBold) {
         applyADHDSentenceBold(doc)
-      }
-      if (adhdOn && opts.paragraphEnhance) {
-        applyADHDParagraphEnhance(doc)
       }
 
       // --- 监听文本选择（mouseup） ---
@@ -356,20 +425,22 @@ const EpubReader: React.FC<EpubReaderProps> = ({ bookData, fileName, onBack }) =
     overlay.style.cssText = 'position:fixed;left:0;right:0;top:0;bottom:0;pointer-events:none;z-index:9999;'
 
     const dimTop = doc.createElement('div')
-    dimTop.style.cssText = 'position:absolute;left:0;right:0;top:0;background:rgba(0,0,0,0.18);pointer-events:none;transition:height 0.12s ease;'
+    dimTop.style.cssText = 'position:absolute;left:0;right:0;top:0;background:rgba(0,0,0,0.08);pointer-events:none;transition:height 0.12s ease;'
 
     const focusLine = doc.createElement('div')
-    focusLine.style.cssText = 'position:absolute;left:0;right:0;background:rgba(245,158,11,0.12);border-top:2px solid rgba(245,158,11,0.35);border-bottom:2px solid rgba(245,158,11,0.35);pointer-events:none;transition:top 0.12s ease, height 0.12s ease;'
+    focusLine.style.cssText = 'position:absolute;left:0;right:0;background:rgba(245,158,11,0.06);border-left:3px solid rgba(245,158,11,0.5);pointer-events:none;transition:top 0.12s ease, height 0.12s ease;'
 
     const dimBottom = doc.createElement('div')
-    dimBottom.style.cssText = 'position:absolute;left:0;right:0;bottom:0;background:rgba(0,0,0,0.18);pointer-events:none;transition:height 0.12s ease;'
+    dimBottom.style.cssText = 'position:absolute;left:0;right:0;bottom:0;background:rgba(0,0,0,0.08);pointer-events:none;transition:height 0.12s ease;'
 
     overlay.appendChild(dimTop)
     overlay.appendChild(focusLine)
     overlay.appendChild(dimBottom)
     doc.body.appendChild(overlay)
 
-    const computedLineHeight = fontSize * lineHeight
+    // 使用固定基础行间距 2.0 计算焦点区域高度
+    const BASE_LINE_HEIGHT = 2.0
+    const computedLineHeight = fontSize * BASE_LINE_HEIGHT
     // 三行范围
     const focusHeight = computedLineHeight * 3 + 16
 
@@ -418,7 +489,155 @@ const EpubReader: React.FC<EpubReaderProps> = ({ bookData, fileName, onBack }) =
       const el = doc.getElementById('adhd-line-overlay')
       if (el) el.remove()
     }
-  }, [fontSize, lineHeight])
+  }, [fontSize])
+
+  // 用 ref 存储最新的排版参数，避免闭包过期
+  const fontSizeRef = useLatest(fontSize)
+  const isDarkModeRef = useLatest(isDarkMode)
+
+  // 固定基础行间距
+  const BASE_LINE_HEIGHT = 2.0
+
+  // 在 iframe 中注入自定义排版样式（直接操作 DOM，绕过 epub.js themes 的限制）
+  const injectCustomStyles = useCallback((doc: Document) => {
+    const fs = fontSizeRef.current
+    const dark = isDarkModeRef.current
+
+    let styleEl = doc.getElementById('custom-layout-styles')
+    if (!styleEl) {
+      styleEl = doc.createElement('style')
+      styleEl.id = 'custom-layout-styles'
+      doc.head.appendChild(styleEl)
+    }
+
+    styleEl.textContent = `
+      body {
+        font-family: 'Noto Serif SC', 'Source Han Serif SC', Georgia, serif !important;
+        font-size: ${fs}px !important;
+        line-height: ${BASE_LINE_HEIGHT} !important;
+        color: ${dark ? '#e8e8e8' : '#1a1a1a'} !important;
+        background: ${dark ? '#16213e' : '#fffdf8'} !important;
+        padding-top: 20px !important;
+        padding-bottom: 20px !important;
+        text-rendering: optimizeLegibility !important;
+        -webkit-font-smoothing: antialiased !important;
+      }
+      p {
+        text-indent: 2em !important;
+        margin-bottom: 0.8em !important;
+      }
+      h1, h2, h3, h4 {
+        text-indent: 0 !important;
+        margin-top: 1.5em !important;
+        margin-bottom: 0.8em !important;
+        font-weight: 700 !important;
+      }
+      /* 选中文本样式 */
+      ::selection {
+        background: rgba(99, 102, 241, 0.25);
+        color: inherit;
+      }
+      ::-moz-selection {
+        background: rgba(99, 102, 241, 0.25);
+        color: inherit;
+      }
+      /* 图片自适应 */
+      img {
+        max-width: 100% !important;
+        height: auto !important;
+      }
+    `
+  }, []) // 不依赖 state，通过 ref 读取
+
+  // 根据当前章节 href + iframe 内滚动比例，计算全书字数进度
+  const calcProgressByChars = useCallback((href: string, scrollRatio: number) => {
+    const chapters = chapterCharsRef.current
+    const total = totalCharsRef.current
+    if (!chapters.length || total === 0) return
+
+    // 标准化 href：去掉 # 锚点和路径前缀
+    const normalizeHref = (h: string) => h.replace(/#.*$/, '').replace(/^\/+/, '')
+    const normHref = normalizeHref(href)
+
+    const chapter = chapters.find((c) => normalizeHref(c.href) === normHref)
+    if (!chapter) return
+
+    const charsBefore = chapter.cumChars
+    const charsInChapter = chapter.chars * Math.max(0, Math.min(1, scrollRatio))
+    const pct = ((charsBefore + charsInChapter) / total) * 100
+    setProgress(Math.round(pct * 100) / 100)
+  }, [])
+
+  // 创建和配置 rendition 的共用函数（固定滚动模式）
+  const setupRendition = useCallback((book: any, container: HTMLDivElement) => {
+    const rendition = book.renderTo(container, {
+      width: '100%',
+      height: '100%',
+      spread: 'none',
+      flow: 'scrolled-doc',
+    })
+    renditionRef.current = rendition
+
+    // 监听章节切换
+    rendition.on('relocated', (location: any) => {
+      setIsLoading(false)
+
+      if (location.start?.href) {
+        setCurrentChapter(location.start.href)
+        // 章节切换时，以滚动位置 0 计算进度
+        calcProgressByChars(location.start.href, 0)
+      }
+
+      // 关闭颜色选择器
+      setColorPicker({ visible: false, x: 0, y: 0, text: '' })
+    })
+
+    // 内容渲染完成后注入自定义样式 + 应用高亮/ADHD效果 + 监听滚动
+    rendition.hooks.content.register((contents: any) => {
+      try {
+        const doc = contents.document as Document
+        if (doc) {
+          injectCustomStyles(doc)
+        }
+      } catch (_) {}
+      applyEffects(contents)
+
+      // 监听 iframe 内的滚动事件，实时更新进度
+      try {
+        // 先清理旧的滚动监听
+        if (scrollCleanupRef.current) {
+          scrollCleanupRef.current()
+          scrollCleanupRef.current = null
+        }
+
+        const doc = contents.document as Document
+        const win = doc.defaultView
+        if (win && doc.body) {
+          const handleScroll = () => {
+            const scrollTop = win.scrollY || doc.documentElement.scrollTop || 0
+            const scrollHeight = doc.documentElement.scrollHeight || doc.body.scrollHeight || 1
+            const clientHeight = win.innerHeight || doc.documentElement.clientHeight || 1
+            const maxScroll = scrollHeight - clientHeight
+            const ratio = maxScroll > 0 ? scrollTop / maxScroll : 0
+
+            // 获取当前章节 href
+            const loc = renditionRef.current?.location
+            const href = loc?.start?.href || ''
+            if (href) {
+              calcProgressByChars(href, ratio)
+            }
+          }
+
+          win.addEventListener('scroll', handleScroll, { passive: true })
+          scrollCleanupRef.current = () => {
+            win.removeEventListener('scroll', handleScroll)
+          }
+        }
+      } catch (_) {}
+    })
+
+    return rendition
+  }, [applyEffects, injectCustomStyles, calcProgressByChars])
 
   // 初始化 EPUB
   useEffect(() => {
@@ -427,37 +646,7 @@ const EpubReader: React.FC<EpubReaderProps> = ({ bookData, fileName, onBack }) =
     const book = new ePub(bookData)
     bookRef.current = book
 
-    const rendition = book.renderTo(viewerRef.current, {
-      width: '100%',
-      height: '100%',
-      spread: 'none',
-      flow: 'paginated',
-    })
-    renditionRef.current = rendition
-
-    // 设置主题样式
-    rendition.themes.default({
-      body: {
-        'font-family': "'Noto Serif SC', 'Source Han Serif SC', Georgia, serif !important",
-        'font-size': `${fontSize}px !important`,
-        'line-height': `${lineHeight} !important`,
-        'color': isDarkMode ? '#e8e8e8 !important' : '#1a1a1a !important',
-        'background': isDarkMode ? '#16213e !important' : '#fffdf8 !important',
-        'padding': `20px ${pagePadding}px !important`,
-        'max-width': '800px !important',
-        'margin': '0 auto !important',
-      },
-      'p': {
-        'text-indent': '2em !important',
-        'margin-bottom': '0.8em !important',
-      },
-      'h1, h2, h3, h4': {
-        'text-indent': '0 !important',
-        'margin-top': '1.5em !important',
-        'margin-bottom': '0.8em !important',
-        'font-weight': '700 !important',
-      },
-    })
+    const rendition = setupRendition(book, viewerRef.current)
 
     // 加载目录
     book.loaded.navigation.then((nav: any) => {
@@ -481,77 +670,78 @@ const EpubReader: React.FC<EpubReaderProps> = ({ bookData, fileName, onBack }) =
       }
     })
 
-    // 监听翻页
-    rendition.on('relocated', (location: any) => {
-      setIsLoading(false)
-
-      // 更新进度
-      if (location.start) {
-        const currentPage = location.start.displayed?.page || 0
-        const totalPages = location.start.displayed?.total || 1
-        const chapterProgress = (currentPage / totalPages) * 100
-        setProgress(chapterProgress)
-
-        // 更新当前章节
-        setCurrentChapter(location.start.href)
-      }
-
-      // 关闭颜色选择器
-      setColorPicker({ visible: false, x: 0, y: 0, text: '' })
-    })
-
-    // 内容渲染完成后应用效果
-    rendition.hooks.content.register((contents: any) => {
-      applyEffects(contents)
-    })
-
     // 显示第一页
     rendition.display()
+
+    // 统计全书各章字数（用于按字数计算阅读进度）
+    book.ready.then(async () => {
+      try {
+        const spine = (book as any).spine
+        const items = spine.items || spine.spineItems || []
+        const chapters: { href: string; chars: number; cumChars: number }[] = []
+        let cumulative = 0
+
+        for (const item of items) {
+          try {
+            // 加载章节内容并统计字数
+            const doc = await (book as any).load(item.href)
+            let text = ''
+            if (doc && typeof (doc as any).querySelector === 'function') {
+              const body = (doc as any).querySelector('body')
+              text = body?.textContent || ''
+            } else if (typeof doc === 'string') {
+              text = doc.replace(/<[^>]*>/g, '')
+            }
+            const charCount = text.replace(/\s+/g, '').length
+            chapters.push({ href: item.href, chars: charCount, cumChars: cumulative })
+            cumulative += charCount
+          } catch (_) {
+            // 某些资源文件可能加载失败，跳过
+            chapters.push({ href: item.href, chars: 0, cumChars: cumulative })
+          }
+        }
+
+        chapterCharsRef.current = chapters
+        totalCharsRef.current = cumulative
+      } catch (err) {
+        console.warn('统计全书字数失败:', err)
+      }
+    })
 
     // 键盘翻页
     const handleKeyPress = (e: KeyboardEvent) => {
       if (e.key === 'ArrowLeft' || e.key === 'PageUp') {
-        rendition.prev()
+        renditionRef.current?.prev()
       } else if (e.key === 'ArrowRight' || e.key === 'PageDown' || e.key === ' ') {
-        rendition.next()
+        renditionRef.current?.next()
       }
     }
     document.addEventListener('keydown', handleKeyPress)
 
     return () => {
       document.removeEventListener('keydown', handleKeyPress)
+      if (scrollCleanupRef.current) {
+        scrollCleanupRef.current()
+        scrollCleanupRef.current = null
+      }
       book.destroy()
     }
   }, [bookData]) // eslint-disable-line react-hooks/exhaustive-deps
 
-  // 字号变化时更新渲染（修复：priority 通过第三个参数传递，而非写在值中）
+  // 字号/行间距/主题变化时，重新注入 iframe 样式
   useEffect(() => {
-    if (renditionRef.current) {
-      renditionRef.current.themes.override('font-size', `${fontSize}px`, true)
-    }
-  }, [fontSize])
+    if (!contentsRef.current) return
+    try {
+      const doc = contentsRef.current.document as Document
+      if (doc) {
+        injectCustomStyles(doc)
+      }
+    } catch (_) {}
+  }, [fontSize, isDarkMode, injectCustomStyles])
 
-  // 行间距变化时更新渲染
-  useEffect(() => {
-    if (renditionRef.current) {
-      renditionRef.current.themes.override('line-height', `${lineHeight}`, true)
-    }
-  }, [lineHeight])
-
-  // 页边距变化时更新渲染
-  useEffect(() => {
-    if (renditionRef.current) {
-      renditionRef.current.themes.override('padding', `20px ${pagePadding}px`, true)
-    }
-  }, [pagePadding])
-
-  // 主题变化
+  // 主题变化时更新主文档属性
   useEffect(() => {
     document.documentElement.setAttribute('data-theme', isDarkMode ? 'dark' : 'light')
-    if (renditionRef.current) {
-      renditionRef.current.themes.override('color', isDarkMode ? '#e8e8e8' : '#1a1a1a', true)
-      renditionRef.current.themes.override('background', isDarkMode ? '#16213e' : '#fffdf8', true)
-    }
   }, [isDarkMode])
 
   // ★ 核心修复：高亮词或 ADHD 模式切换后，直接在已有的 contents 上重新应用效果
@@ -639,12 +829,11 @@ const EpubReader: React.FC<EpubReaderProps> = ({ bookData, fileName, onBack }) =
         progress={progress}
         fontSize={fontSize}
         onFontSizeChange={setFontSize}
-        lineHeight={lineHeight}
-        onLineHeightChange={setLineHeight}
-        pagePadding={pagePadding}
-        onPagePaddingChange={setPagePadding}
         sessionSeconds={sessionSeconds}
         totalSeconds={totalSeconds}
+        onBack={onBack}
+        isBookmarked={isCurrentPageBookmarked}
+        onToggleBookmark={addBookmark}
       />
 
       <div style={styles.body}>
@@ -661,19 +850,14 @@ const EpubReader: React.FC<EpubReaderProps> = ({ bookData, fileName, onBack }) =
             onChangeHighlightColor={changeHighlightColor}
             onExportHighlights={handleExportHighlights}
             onImportHighlights={handleImportHighlights}
+            bookmarks={bookmarks}
+            onRemoveBookmark={removeBookmark}
+            onNavigateBookmark={navigateToBookmark}
           />
         )}
 
         {/* 阅读区域 */}
         <div style={styles.readerArea}>
-          {/* 返回按钮 */}
-          <button style={styles.backBtn} onClick={onBack} title="返回">
-            <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
-              <path d="M10 12L6 8L10 4" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
-            </svg>
-            换书
-          </button>
-
           {isLoading && (
             <div style={styles.loadingOverlay}>
               <div style={styles.loadingSpinner} />
@@ -681,6 +865,14 @@ const EpubReader: React.FC<EpubReaderProps> = ({ bookData, fileName, onBack }) =
             </div>
           )}
 
+          {/* 左侧热区：点击切换上一章 */}
+          <div
+            style={styles.prevHotzone}
+            onClick={handlePrev}
+            title="上一章"
+          />
+
+          {/* epub.js 渲染容器 */}
           <div
             ref={viewerRef}
             style={{
@@ -689,9 +881,12 @@ const EpubReader: React.FC<EpubReaderProps> = ({ bookData, fileName, onBack }) =
             }}
           />
 
-          {/* 翻页热区 */}
-          <div style={styles.prevHotzone} onClick={handlePrev} />
-          <div style={styles.nextHotzone} onClick={handleNext} />
+          {/* 右侧热区：点击切换下一章 */}
+          <div
+            style={styles.nextHotzone}
+            onClick={handleNext}
+            title="下一章"
+          />
         </div>
       </div>
 
@@ -724,49 +919,31 @@ const styles: Record<string, React.CSSProperties> = {
   readerArea: {
     flex: 1,
     position: 'relative',
+    display: 'flex',
+    flexDirection: 'row',
     backgroundColor: 'var(--bg-primary)',
     overflow: 'hidden',
   },
   viewer: {
-    width: '100%',
+    flex: 1,
     height: '100%',
     transition: 'opacity 0.3s ease',
   },
-  backBtn: {
-    position: 'absolute',
-    top: 12,
-    left: 12,
-    zIndex: 5,
-    background: 'var(--bg-secondary)',
-    border: '1px solid var(--border-color)',
-    borderRadius: 8,
-    padding: '6px 12px',
-    fontSize: 12,
-    color: 'var(--text-secondary)',
-    cursor: 'pointer',
-    display: 'flex',
-    alignItems: 'center',
-    gap: 4,
-    boxShadow: 'var(--shadow-sm)',
-    transition: 'all 0.2s ease',
-  },
   prevHotzone: {
-    position: 'absolute',
-    top: 0,
-    left: 0,
-    width: '15%',
+    width: 60,
+    minWidth: 60,
     height: '100%',
     cursor: 'w-resize',
     zIndex: 2,
+    backgroundColor: 'transparent',
   },
   nextHotzone: {
-    position: 'absolute',
-    top: 0,
-    right: 0,
-    width: '15%',
+    width: 60,
+    minWidth: 60,
     height: '100%',
     cursor: 'e-resize',
     zIndex: 2,
+    backgroundColor: 'transparent',
   },
   loadingOverlay: {
     position: 'absolute',
