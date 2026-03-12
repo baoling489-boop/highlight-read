@@ -117,14 +117,14 @@ export function generateADHDStyles(options: {
   if (options.sentenceBold) {
     if (dark) {
       // 暗色模式（正文 #e0e0e0，背景深蓝）
-      // 句首：白色渐变到正文色，字重从 900 到 500
+      // 句首：白色渐变到正文色，字重从 900 到 500，字号从 1.08em 到 1.00em
       // 句尾：用偏蓝灰色系，视觉有辨识度但不会太暗
       css += `
-        .adhd-head-1 { font-weight: 900 !important; color: #ffffff !important; }
-        .adhd-head-2 { font-weight: 800 !important; color: #f0f0f0 !important; }
-        .adhd-head-3 { font-weight: 700 !important; color: #e0e0e0 !important; }
-        .adhd-head-4 { font-weight: 650 !important; color: #d4d4d4 !important; }
-        .adhd-head-5 { font-weight: 600 !important; color: #c8c8c8 !important; }
+        .adhd-head-1 { font-weight: 900 !important; color: #ffffff !important; font-size: 1.08em !important; }
+        .adhd-head-2 { font-weight: 800 !important; color: #f0f0f0 !important; font-size: 1.06em !important; }
+        .adhd-head-3 { font-weight: 700 !important; color: #e0e0e0 !important; font-size: 1.04em !important; }
+        .adhd-head-4 { font-weight: 650 !important; color: #d4d4d4 !important; font-size: 1.02em !important; }
+        .adhd-head-5 { font-weight: 600 !important; color: #c8c8c8 !important; font-size: 1.00em !important; }
         .adhd-tail-1 { color: #b0b8c8 !important; }
         .adhd-tail-2 { color: #9aa4b8 !important; }
         .adhd-tail-3 { color: #8690a5 !important; }
@@ -133,14 +133,14 @@ export function generateADHDStyles(options: {
       `
     } else {
       // 浅色模式（正文 #222）
-      // 句首：纯黑渐变到正文色，渐变更缓更自然
+      // 句首：纯黑渐变到正文色，字重从 900 到 600，字号从 1.08em 到 1.00em
       // 句尾：改用蓝灰色系（slate），视觉上有色彩辨识度但不会太淡
       css += `
-        .adhd-head-1 { font-weight: 900 !important; color: #000000 !important; }
-        .adhd-head-2 { font-weight: 800 !important; color: #0a0a0a !important; }
-        .adhd-head-3 { font-weight: 700 !important; color: #151515 !important; }
-        .adhd-head-4 { font-weight: 650 !important; color: #1c1c1c !important; }
-        .adhd-head-5 { font-weight: 600 !important; color: #222222 !important; }
+        .adhd-head-1 { font-weight: 900 !important; color: #000000 !important; font-size: 1.08em !important; }
+        .adhd-head-2 { font-weight: 800 !important; color: #0a0a0a !important; font-size: 1.06em !important; }
+        .adhd-head-3 { font-weight: 700 !important; color: #151515 !important; font-size: 1.04em !important; }
+        .adhd-head-4 { font-weight: 650 !important; color: #1c1c1c !important; font-size: 1.02em !important; }
+        .adhd-head-5 { font-weight: 600 !important; color: #222222 !important; font-size: 1.00em !important; }
         .adhd-tail-1 { color: #334155 !important; }
         .adhd-tail-2 { color: #3d4d63 !important; }
         .adhd-tail-3 { color: #475569 !important; }
@@ -150,17 +150,15 @@ export function generateADHDStyles(options: {
     }
   }
 
-  // 当前行高亮 — 使用更柔和的样式，避免与高亮/句首句尾冲突
+  // 鼠标跟随 3 行聚焦高亮 — 蓝紫色样式
   if (options.lineHighlight) {
     css += `
-      .adhd-line-highlight-active {
-        position: relative;
-      }
       .adhd-line-overlay {
         position: fixed;
         left: 0;
         right: 0;
-        height: 100%;
+        top: 0;
+        bottom: 0;
         pointer-events: none;
         z-index: 9999;
       }
@@ -168,18 +166,19 @@ export function generateADHDStyles(options: {
         position: absolute;
         left: 0;
         right: 0;
-        background: rgba(245, 158, 11, 0.06);
-        border-left: 3px solid rgba(245, 158, 11, 0.5);
-        transition: top 0.15s ease;
+        background: ${dark ? 'rgba(129, 140, 248, 0.08)' : 'rgba(99, 102, 241, 0.06)'};
+        border-left: 3px solid ${dark ? 'rgba(129, 140, 248, 0.4)' : 'rgba(99, 102, 241, 0.5)'};
+        border-radius: 6px;
+        transition: top 0.12s ease, height 0.12s ease;
         pointer-events: none;
       }
       .adhd-dim-overlay-top, .adhd-dim-overlay-bottom {
         position: absolute;
         left: 0;
         right: 0;
-        background: rgba(0, 0, 0, 0.08);
+        background: ${dark ? 'rgba(0, 0, 0, 0.12)' : 'rgba(0, 0, 0, 0.06)'};
         pointer-events: none;
-        transition: all 0.15s ease;
+        transition: height 0.12s ease;
       }
     `
   }

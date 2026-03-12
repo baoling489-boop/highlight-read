@@ -592,10 +592,10 @@ const EpubReader: React.FC<EpubReaderProps> = ({ bookData, fileName, onBack }) =
       }
       doc.addEventListener('keydown', handleIframeKeyDown, true)
 
-      // --- ADHD 行高亮 ---
+      // --- ADHD 智能区域聚焦 ---
       let adhdCleanup: (() => void) | null = null
       if (adhdOn && opts.lineHighlight) {
-        adhdCleanup = setupLineHighlight(doc)
+        adhdCleanup = setupRegionFocus(doc)
       }
 
       // 保存清理函数
@@ -611,35 +611,36 @@ const EpubReader: React.FC<EpubReaderProps> = ({ bookData, fileName, onBack }) =
     }
   }, []) // 不依赖任何 state，通过 ref 读取最新值
 
-  // ADHD 当前行高亮功能 - 返回清理函数
-  const setupLineHighlight = useCallback((doc: Document): (() => void) => {
+  // ADHD 当前行高亮功能 - 鼠标跟随 3 行聚焦窗口，蓝紫色样式
+  const setupRegionFocus = useCallback((doc: Document): (() => void) => {
     // 移除已有的行高亮元素
     const existingOverlay = doc.getElementById('adhd-line-overlay')
     if (existingOverlay) existingOverlay.remove()
 
-    // 创建行高亮元素
+    // 创建 overlay 结构
     const overlay = doc.createElement('div')
     overlay.id = 'adhd-line-overlay'
-    overlay.style.cssText = 'position:fixed;left:0;right:0;top:0;bottom:0;pointer-events:none;z-index:9999;'
+    overlay.className = 'adhd-line-overlay'
 
     const dimTop = doc.createElement('div')
-    dimTop.style.cssText = 'position:absolute;left:0;right:0;top:0;background:rgba(0,0,0,0.08);pointer-events:none;transition:height 0.12s ease;'
+    dimTop.className = 'adhd-dim-overlay-top'
+    dimTop.style.top = '0'
 
     const focusLine = doc.createElement('div')
-    focusLine.style.cssText = 'position:absolute;left:0;right:0;background:rgba(245,158,11,0.06);border-left:3px solid rgba(245,158,11,0.5);pointer-events:none;transition:top 0.12s ease, height 0.12s ease;'
+    focusLine.className = 'adhd-focus-line'
 
     const dimBottom = doc.createElement('div')
-    dimBottom.style.cssText = 'position:absolute;left:0;right:0;bottom:0;background:rgba(0,0,0,0.08);pointer-events:none;transition:height 0.12s ease;'
+    dimBottom.className = 'adhd-dim-overlay-bottom'
+    dimBottom.style.bottom = '0'
 
     overlay.appendChild(dimTop)
     overlay.appendChild(focusLine)
     overlay.appendChild(dimBottom)
     doc.body.appendChild(overlay)
 
-    // 使用固定基础行间距 2.0 计算焦点区域高度
+    // 3 行聚焦区域高度
     const BASE_LINE_HEIGHT = 2.0
-    const computedLineHeight = fontSize * BASE_LINE_HEIGHT
-    // 三行范围
+    const computedLineHeight = fontSizeRef.current * BASE_LINE_HEIGHT
     const focusHeight = computedLineHeight * 3 + 16
 
     const handleMouseMove = (e: MouseEvent) => {
@@ -647,18 +648,14 @@ const EpubReader: React.FC<EpubReaderProps> = ({ bookData, fileName, onBack }) =
 
       // 尝试吸附到鼠标所在的文本行
       let snapY = mouseY
-
-      // 方法：用 caretRangeFromPoint 定位鼠标下最近的文本行
       try {
         const caretRange = (doc as any).caretRangeFromPoint?.(e.clientX, e.clientY)
         if (caretRange) {
           const rangeRect = caretRange.getBoundingClientRect()
           if (rangeRect && rangeRect.height > 0) {
-            // 吸附到该行的垂直中心
             snapY = rangeRect.top + rangeRect.height / 2
           }
         } else {
-          // 备用方案：elementFromPoint
           const el = doc.elementFromPoint(e.clientX, e.clientY)
           if (el && el !== doc.body && el !== doc.documentElement) {
             const elRect = el.getBoundingClientRect()
@@ -668,7 +665,6 @@ const EpubReader: React.FC<EpubReaderProps> = ({ bookData, fileName, onBack }) =
           }
         }
       } catch (_) {
-        // 如果获取失败，退回到鼠标位置
         snapY = mouseY
       }
 
@@ -687,7 +683,7 @@ const EpubReader: React.FC<EpubReaderProps> = ({ bookData, fileName, onBack }) =
       const el = doc.getElementById('adhd-line-overlay')
       if (el) el.remove()
     }
-  }, [fontSize])
+  }, [])
 
   // 用 ref 存储最新的排版参数，避免闭包过期
   const fontSizeRef = useLatest(fontSize)
