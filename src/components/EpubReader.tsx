@@ -151,7 +151,6 @@ const EpubReader: React.FC<EpubReaderProps> = ({ bookData, fileName, onBack }) =
   const [adhdOptions, setAdhdOptions] = useState<ADHDOptions>({
     enabled: false,
     sentenceBold: true,
-    lineHighlight: true,
     letterSpacing: true,
     lineSpacingEnhance: false,
   })
@@ -523,7 +522,6 @@ const EpubReader: React.FC<EpubReaderProps> = ({ bookData, fileName, onBack }) =
       if (adhdOn) {
         css += generateADHDStyles({
           sentenceBold: opts.sentenceBold,
-          lineHighlight: opts.lineHighlight,
           letterSpacing: opts.letterSpacing,
           lineSpacingEnhance: opts.lineSpacingEnhance,
           isDark: isDarkModeRef.current,
@@ -592,17 +590,10 @@ const EpubReader: React.FC<EpubReaderProps> = ({ bookData, fileName, onBack }) =
       }
       doc.addEventListener('keydown', handleIframeKeyDown, true)
 
-      // --- ADHD 智能区域聚焦 ---
-      let adhdCleanup: (() => void) | null = null
-      if (adhdOn && opts.lineHighlight) {
-        adhdCleanup = setupRegionFocus(doc)
-      }
-
       // 保存清理函数
       cleanupRef.current = () => {
         doc.removeEventListener('mouseup', handleMouseUp, true)
         doc.removeEventListener('keydown', handleIframeKeyDown, true)
-        if (adhdCleanup) adhdCleanup()
       }
 
       contentsRef.current = contents
@@ -610,80 +601,6 @@ const EpubReader: React.FC<EpubReaderProps> = ({ bookData, fileName, onBack }) =
       console.warn('效果处理出错:', err)
     }
   }, []) // 不依赖任何 state，通过 ref 读取最新值
-
-  // ADHD 当前行高亮功能 - 鼠标跟随 3 行聚焦窗口，蓝紫色样式
-  const setupRegionFocus = useCallback((doc: Document): (() => void) => {
-    // 移除已有的行高亮元素
-    const existingOverlay = doc.getElementById('adhd-line-overlay')
-    if (existingOverlay) existingOverlay.remove()
-
-    // 创建 overlay 结构
-    const overlay = doc.createElement('div')
-    overlay.id = 'adhd-line-overlay'
-    overlay.className = 'adhd-line-overlay'
-
-    const dimTop = doc.createElement('div')
-    dimTop.className = 'adhd-dim-overlay-top'
-    dimTop.style.top = '0'
-
-    const focusLine = doc.createElement('div')
-    focusLine.className = 'adhd-focus-line'
-
-    const dimBottom = doc.createElement('div')
-    dimBottom.className = 'adhd-dim-overlay-bottom'
-    dimBottom.style.bottom = '0'
-
-    overlay.appendChild(dimTop)
-    overlay.appendChild(focusLine)
-    overlay.appendChild(dimBottom)
-    doc.body.appendChild(overlay)
-
-    // 3 行聚焦区域高度
-    const BASE_LINE_HEIGHT = 2.0
-    const computedLineHeight = fontSizeRef.current * BASE_LINE_HEIGHT
-    const focusHeight = computedLineHeight * 3 + 16
-
-    const handleMouseMove = (e: MouseEvent) => {
-      const mouseY = e.clientY
-
-      // 尝试吸附到鼠标所在的文本行
-      let snapY = mouseY
-      try {
-        const caretRange = (doc as any).caretRangeFromPoint?.(e.clientX, e.clientY)
-        if (caretRange) {
-          const rangeRect = caretRange.getBoundingClientRect()
-          if (rangeRect && rangeRect.height > 0) {
-            snapY = rangeRect.top + rangeRect.height / 2
-          }
-        } else {
-          const el = doc.elementFromPoint(e.clientX, e.clientY)
-          if (el && el !== doc.body && el !== doc.documentElement) {
-            const elRect = el.getBoundingClientRect()
-            if (elRect.height > 0 && elRect.height < 200) {
-              snapY = elRect.top + elRect.height / 2
-            }
-          }
-        }
-      } catch (_) {
-        snapY = mouseY
-      }
-
-      const top = Math.max(0, snapY - focusHeight / 2)
-
-      dimTop.style.height = `${top}px`
-      focusLine.style.top = `${top}px`
-      focusLine.style.height = `${focusHeight}px`
-      dimBottom.style.top = `${top + focusHeight}px`
-    }
-    doc.addEventListener('mousemove', handleMouseMove)
-
-    // 返回清理函数
-    return () => {
-      doc.removeEventListener('mousemove', handleMouseMove)
-      const el = doc.getElementById('adhd-line-overlay')
-      if (el) el.remove()
-    }
-  }, [])
 
   // 用 ref 存储最新的排版参数，避免闭包过期
   const fontSizeRef = useLatest(fontSize)
@@ -1015,11 +932,6 @@ const EpubReader: React.FC<EpubReaderProps> = ({ bookData, fileName, onBack }) =
         return
       }
 
-      // 获取 iframe 内的 window 用于滚动
-      const iframe = viewerRef.current?.querySelector('iframe')
-      const iframeWin = iframe?.contentWindow
-      const iframeDoc = iframe?.contentDocument
-
       if (e.key === 'ArrowLeft') {
         // 上一章
         renditionRef.current?.prev()
@@ -1029,6 +941,12 @@ const EpubReader: React.FC<EpubReaderProps> = ({ bookData, fileName, onBack }) =
       } else if (e.key === 'ArrowDown' || e.key === 'PageDown' || e.key === ' ') {
         // 向下平滑滚动约 85% 视口高度
         e.preventDefault()
+
+        // 获取 iframe 内的 window 用于滚动
+        const iframe = viewerRef.current?.querySelector('iframe')
+        const iframeWin = iframe?.contentWindow
+        const iframeDoc = iframe?.contentDocument
+
         if (iframeWin && iframeDoc) {
           const clientHeight = iframeWin.innerHeight || iframeDoc.documentElement.clientHeight || 600
           const scrollTop = iframeWin.scrollY || iframeDoc.documentElement.scrollTop || 0
@@ -1045,6 +963,11 @@ const EpubReader: React.FC<EpubReaderProps> = ({ bookData, fileName, onBack }) =
       } else if (e.key === 'ArrowUp' || e.key === 'PageUp') {
         // 向上平滑滚动约 85% 视口高度
         e.preventDefault()
+
+        const iframe = viewerRef.current?.querySelector('iframe')
+        const iframeWin = iframe?.contentWindow
+        const iframeDoc = iframe?.contentDocument
+
         if (iframeWin && iframeDoc) {
           const clientHeight = iframeWin.innerHeight || iframeDoc.documentElement.clientHeight || 600
           const scrollTop = iframeWin.scrollY || iframeDoc.documentElement.scrollTop || 0

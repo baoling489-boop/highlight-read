@@ -3,7 +3,6 @@ import React, { useState, useEffect, useRef, useCallback } from 'react'
 export interface ADHDOptions {
   enabled: boolean
   sentenceBold: boolean    // 句首加粗+句尾灰色
-  lineHighlight: boolean   // 聚焦行高亮
   letterSpacing: boolean   // 字间距增强
   lineSpacingEnhance: boolean // 行间距增强
 }
@@ -307,7 +306,6 @@ const Toolbar: React.FC<ToolbarProps> = ({
                 <div style={styles.panelTitle}>🧠 ADHD 模式选项</div>
                 {([
                   { key: 'sentenceBold' as const, label: '句首/句尾强化', desc: '句首渐变加粗+微放大，句尾灰色渐淡' },
-                  { key: 'lineHighlight' as const, label: '阅读聚焦', desc: '鼠标所在行高亮聚焦，上下区域微暗' },
                   { key: 'letterSpacing' as const, label: '字间距增强', desc: '增加字间距提升辨识度' },
                   { key: 'lineSpacingEnhance' as const, label: '行间距增强', desc: '加大行间距提升阅读舒适度' },
                 ]).map(({ key, label, desc }) => (
@@ -332,6 +330,8 @@ const Toolbar: React.FC<ToolbarProps> = ({
                     </button>
                   </div>
                 ))}
+
+
               </div>
             </>
           )}

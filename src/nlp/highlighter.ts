@@ -105,7 +105,6 @@ export function generateHighlightStyles(words: HighlightWord[]): string {
  */
 export function generateADHDStyles(options: {
   sentenceBold: boolean
-  lineHighlight: boolean
   letterSpacing: boolean
   lineSpacingEnhance: boolean
   isDark?: boolean
@@ -148,39 +147,6 @@ export function generateADHDStyles(options: {
         .adhd-tail-5 { color: #64748b !important; }
       `
     }
-  }
-
-  // 鼠标跟随 3 行聚焦高亮 — 蓝紫色样式
-  if (options.lineHighlight) {
-    css += `
-      .adhd-line-overlay {
-        position: fixed;
-        left: 0;
-        right: 0;
-        top: 0;
-        bottom: 0;
-        pointer-events: none;
-        z-index: 9999;
-      }
-      .adhd-focus-line {
-        position: absolute;
-        left: 0;
-        right: 0;
-        background: ${dark ? 'rgba(129, 140, 248, 0.08)' : 'rgba(99, 102, 241, 0.06)'};
-        border-left: 3px solid ${dark ? 'rgba(129, 140, 248, 0.4)' : 'rgba(99, 102, 241, 0.5)'};
-        border-radius: 6px;
-        transition: top 0.12s ease, height 0.12s ease;
-        pointer-events: none;
-      }
-      .adhd-dim-overlay-top, .adhd-dim-overlay-bottom {
-        position: absolute;
-        left: 0;
-        right: 0;
-        background: ${dark ? 'rgba(0, 0, 0, 0.12)' : 'rgba(0, 0, 0, 0.06)'};
-        pointer-events: none;
-        transition: height 0.12s ease;
-      }
-    `
   }
 
   // 字间距微调
@@ -579,10 +545,6 @@ export function clearAllEffects(doc: Document): void {
       parent.replaceChild(textNode, span)
     }
   })
-
-  // 清除 ADHD line overlay
-  const overlay = doc.getElementById('adhd-line-overlay')
-  if (overlay) overlay.remove()
 
   // 清除 ADHD spacing class
   body.classList.remove('adhd-spacing')
